@@ -9,7 +9,7 @@ import { GameState } from './game/GameState';
 import { Rules } from './game/SpellResolver';
 import { TurnManager, Phase } from './game/TurnManager';
 import { DungeonGenerator } from './game/DungeonGenerator';
-import { Rng, Vec, key, veq, emptyStatus } from './game/types';
+import { Rng, Vec, key, veq, emptyStatus, dirTo } from './game/types';
 import { Spell, SpellGenerator, getTargetTiles, planSpell } from './spells/SpellGenerator';
 import { QUIPS } from './spells/SpellComponents';
 import { MetaProgression } from './meta/MetaProgression';
@@ -211,6 +211,7 @@ export class Game {
       this.board.clearHighlights();
       this.board.setArea([]);
       this.hud.hint(null);
+      this.view.setGhost(null);
     } else {
       // cooldowns tick at the start of each of your turns
       if (this.run && !this.turns.hasMoved && !this.turns.hasCast) {
@@ -255,7 +256,7 @@ export class Game {
   }
 
   private updateHighlights() {
-    if (!this.run || this.turns.phase !== 'player') { this.board.clearHighlights(); this.board.setArea([]); return; }
+    if (!this.run || this.turns.phase !== 'player') { this.board.clearHighlights(); this.board.setArea([]); this.view.setGhost(null); return; }
     const wiz = this.state.wizard;
     const focus = this.pending ?? this.hovered;
     if (this.selected >= 0) {
@@ -264,15 +265,20 @@ export class Game {
       this.board.setHighlights(targets, 'range');
       const plan = focus ? planSpell(spell, wiz, focus, this.state) : null;
       this.board.setArea(plan ? plan.area : []);
+      this.view.setGhost(null);
     } else if (!this.turns.hasMoved) {
       const reach = this.turns.reachable(wiz, false);
       this.board.setHighlights([...reach.values()].map(p => p[p.length - 1]), 'move');
       const path = focus ? reach.get(key(focus)) : undefined;
       if (path) this.board.addHighlights(path, 'path');
+      // a see-through Archmage shows where you will end up before you confirm
+      if (path && focus) this.view.setGhost(focus, dirTo(path.length > 1 ? path[path.length - 2] : wiz.pos, focus));
+      else this.view.setGhost(null);
       this.board.setArea([]);
     } else {
       this.board.clearHighlights();
       this.board.setArea([]);
+      this.view.setGhost(null);
     }
   }
 
@@ -468,6 +474,7 @@ export class Game {
     this.hud.hint(null);
     this.board.setArea([]);
     this.board.clearHighlights();
+    this.view.setGhost(null);
     if (this.selected >= 0) {
       const spell = this.run.hand[this.selected];
       this.selected = -1;

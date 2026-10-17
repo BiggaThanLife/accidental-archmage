@@ -385,6 +385,8 @@ export class EntityView {
   readonly propMeshes = new Map<number, THREE.Group>();
   private tags = new Map<number, HTMLDivElement>();
   private tagSig = new Map<number, string>();
+  /** see-through wizard previewing where a move will end */
+  private ghost: THREE.Group | null = null;
 
   constructor(private sm: SceneManager, private labelLayer: HTMLElement) {
     sm.onTick((_dt, time) => this.tick(time));
@@ -399,6 +401,27 @@ export class EntityView {
     for (const m of this.propMeshes.values()) this.sm.scene.remove(m);
     for (const t of this.tags.values()) t.remove();
     this.unitMeshes.clear(); this.propMeshes.clear(); this.tags.clear(); this.tagSig.clear();
+    this.setGhost(null);
+  }
+
+  /** Show (or hide, with null) the ghost Archmage on a tile, facing the way the walk would end. */
+  setGhost(p: Vec | null, facing: Dir = 2) {
+    if (!p) { if (this.ghost) this.ghost.visible = false; return; }
+    if (!this.ghost) {
+      const g = makeWizard();
+      g.traverse(c => {
+        const m = c as THREE.Mesh;
+        if (!m.isMesh) return;
+        const mat = (m.material as THREE.MeshStandardMaterial).clone();
+        mat.transparent = true; mat.opacity = 0.42; mat.depthWrite = false;
+        m.material = mat; m.castShadow = false; m.receiveShadow = false;
+      });
+      this.sm.scene.add(g);
+      this.ghost = g;
+    }
+    this.ghost.visible = true;
+    this.ghost.position.copy(tileToWorld(p));
+    this.ghost.rotation.y = facingToRot(facing);
   }
 
   /** Create meshes for anything new; remove meshes for things that are gone. */
@@ -571,6 +594,7 @@ export class EntityView {
       const spark = m.getObjectByName('spark');
       if (spark) spark.scale.setScalar(0.7 + Math.sin(time * 20) * 0.4);
     }
+    if (this.ghost?.visible) this.ghost.position.y = 0.06 + Math.sin(time * 4) * 0.05;
     // idle bob for units
     for (const [id, m] of this.unitMeshes) {
       const child = m.children[0];

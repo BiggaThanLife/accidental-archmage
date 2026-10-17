@@ -240,8 +240,8 @@ export class HUD {
     const o = this.showOverlay(`
       <div class="memo">
         <div class="memo-head">
-          <span class="eyebrow">Memo · Human Resources, Tower Administration</span>
-          <h2>RE: Your promotion</h2>
+          <span class="eyebrow">Memo from HR</span>
+          <h2>Re: Your promotion</h2>
         </div>
         <p>Due to a clerical error (Form 27-B, misfiled), you are now the <b>Archmage</b>. Your predecessor is "on leave." Do not ask.</p>
         <p>You have not been trained. The spellbook is mostly sticky notes. Spells are assembled from whatever was in the supply closet, and they will do <em>roughly</em> what they say.</p>
