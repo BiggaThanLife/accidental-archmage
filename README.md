@@ -1,5 +1,7 @@
 # Accidental Archmage
 
+**Play it in your browser: https://biggathanlife.github.io/accidental-archmage/**
+
 A slapstick, isometric, turn-based tactical roguelite prototype built with **Three.js + TypeScript + Vite**.
 You were hired as the janitor. Through a clerical error you are now the Archmage. Climb a procedural tower with
 spells assembled from `[Delivery Method] + [Payload Element] + [Recoil / Side Effect]`.
