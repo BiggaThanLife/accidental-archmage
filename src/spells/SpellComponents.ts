@@ -5,9 +5,13 @@
 export type Shape =
   | 'cone' | 'homing' | 'targeted' | 'overhead' | 'arc' | 'single'
   | 'splash2x2' | 'area3x3' | 'path' | 'pierce' | 'flood' | 'selfAoe'
-  | 'fireTarget' | 'pull' | 'projectile' | 'lob' | 'stampede';
+  | 'fireTarget' | 'pull' | 'projectile' | 'lob' | 'stampede'
+  | 'global' | 'dash' | 'chain' | 'summon' | 'trap';
 
-export type DisplaceKind = 'none' | 'push' | 'pull' | 'turn' | 'pullToCaster' | 'inward';
+export type DisplaceKind = 'none' | 'push' | 'pull' | 'turn' | 'pullToCaster' | 'inward' | 'outward';
+
+/** Components that need an Academy branch: Office Politics (petty) or Corporate Necromancy (dark). */
+export type ComponentBranch = 'politics' | 'necro';
 
 export interface DeliveryDef {
   id: string;
@@ -23,6 +27,7 @@ export interface DeliveryDef {
   /** 0 = core, 1 = Kitchen Arts, 2 = Party Arts, 3 = Agricultural Siegecraft */
   tier: number;
   electric?: boolean;
+  branch?: ComponentBranch;
   /** human-readable pattern, e.g. "2-tile cone" */
   pattern: string;
   blurb: string;
@@ -34,6 +39,7 @@ export interface PayloadDef {
   name: string;
   adj: string;
   tier: number;
+  branch?: ComponentBranch;
   damage: number;
   blurb: string;
   color: number;
@@ -42,6 +48,7 @@ export interface PayloadDef {
 export interface SideDef {
   id: string;
   tier: number;
+  branch?: ComponentBranch;
   text: string;
   /** short tag for the card */
   tag: string;
@@ -74,6 +81,20 @@ export const DELIVERIES: DeliveryDef[] = [
   // ---- Agricultural Siegecraft (tier 3)
   { id: 'catapult', name: 'Catapult', noun: 'Trebuchet', shape: 'lob', range: 6, minRange: 2, baseDamage: 3, displace: 'push', displaceDist: 1, tier: 3, pattern: 'lob, 2–6 tiles', blurb: 'Lobs over obstacles. You built it during the loading screen.', color: 0x7a5230 },
   { id: 'livestock', name: 'Summoned Livestock', noun: 'Cow', shape: 'stampede', range: 5, baseDamage: 2, displace: 'push', displaceDist: 2, tier: 3, pattern: '5-tile stampede', blurb: 'A cow charges a line, shoving everyone 2 tiles. Moo.', color: 0xffffff },
+
+  // ---- Office Politics (Academy: petty components)
+  { id: 'replyall', name: 'Reply-All Avalanche', noun: 'Reply-All', shape: 'global', range: 0, baseDamage: 1, displace: 'none', displaceDist: 0, tier: 0, branch: 'politics', pattern: 'every enemy on the floor', blurb: 'Hits every enemy on the floor. They are all now annoyed enough to move 1 extra tile.', color: 0x7ab8ff },
+  { id: 'stapler', name: 'Stapler of Finality', noun: 'Stapler', shape: 'single', range: 2, baseDamage: 2, displace: 'none', displaceDist: 0, tier: 0, branch: 'politics', pattern: 'single target, 2 tiles', blurb: 'Staples the target to the floor: it cannot move or be pushed for 2 turns.', color: 0x9aa3b5 },
+  { id: 'chair', name: 'Swivel Chair Joust', noun: 'Swivel Chair', shape: 'dash', range: 4, baseDamage: 1, displace: 'push', displaceDist: 2, tier: 0, branch: 'politics', pattern: 'charge up to 4 tiles', blurb: 'You ride a swivel chair up to 4 tiles in a line and ram the first thing you meet 2 tiles further.', color: 0x333a48 },
+  { id: 'sticky', name: 'Passive-Aggressive Sticky Note', noun: 'Sticky Note', shape: 'chain', range: 4, baseDamage: 1, displace: 'none', displaceDist: 0, tier: 0, branch: 'politics', pattern: 'target + 2 jumps, 4 tiles', blurb: '"Per my last note..." Hits the target, then jumps to up to 2 more nearby.', color: 0xffe14a },
+  { id: 'lostfound', name: 'Lost-and-Found Bin', noun: 'Lost-and-Found', shape: 'lob', range: 5, minRange: 2, baseDamage: 1, displace: 'push', displaceDist: 1, tier: 0, branch: 'politics', pattern: 'lob, 2-5 tiles', blurb: 'Lobbed over obstacles. The bin stays behind as cover, full of single gloves.', color: 0x3d7be0 },
+
+  // ---- Corporate Necromancy (Academy: dark components)
+  { id: 'plant', name: 'Unwatered Office Plant', noun: 'Ficus', shape: 'trap', range: 3, baseDamage: 2, displace: 'none', displaceDist: 0, tier: 0, branch: 'necro', pattern: 'trap, 3 tiles', blurb: 'Plants a dead ficus. It goes off when an enemy steps next to it, hitting everything around it except you.', color: 0x8a7a3a },
+  { id: 'shredder', name: 'Paper Shredder of Due Process', noun: 'Shredder', shape: 'pull', range: 4, baseDamage: 2, displace: 'pull', displaceDist: 2, tier: 0, branch: 'necro', pattern: '4-tile pull line', blurb: 'Drags the first enemy in line 2 tiles toward you, feet first.', color: 0x5a5f6b },
+  { id: 'golem', name: 'Printer Jam Golem', noun: 'Printer Golem', shape: 'summon', range: 3, baseDamage: 0, displace: 'none', displaceDist: 0, tier: 0, branch: 'necro', pattern: 'summon decoy, 3 tiles', blurb: 'Summons a jammed printer (4 HP) that every enemy must attack until it breaks. Anything next to it when it lands gets the payload.', color: 0xd8d8d8 },
+  { id: 'review', name: 'Performance Review', noun: 'Review', shape: 'single', range: 5, baseDamage: 1, displace: 'none', displaceDist: 0, tier: 0, branch: 'necro', pattern: 'single target, 5 tiles', blurb: 'Instantly lets go of an enemy at 2 HP or less. Otherwise, a 1-damage "note for improvement".', color: 0xff3b30 },
+  { id: 'firedrill', name: 'Fire Drill', noun: 'Fire Drill', shape: 'selfAoe', range: 0, baseDamage: 0, displace: 'outward', displaceDist: 2, tier: 0, branch: 'necro', pattern: 'around you, radius 2', blurb: 'Everyone within 2 tiles is shoved 2 tiles away from you. This is not a drill. It is a drill.', color: 0xff5a36 },
 ];
 
 export const PAYLOADS: PayloadDef[] = [
@@ -97,6 +118,20 @@ export const PAYLOADS: PayloadDef[] = [
   { id: 'hiccups', name: 'Uncontrollable Hiccups', adj: 'Hiccuping', tier: 2, damage: 1, blurb: "interrupts the target's telegraphed attack", color: 0x9ad0ff },
   { id: 'glitter', name: 'Infinite Glitter', adj: 'Bedazzling', tier: 2, damage: 0, blurb: 'blinds: their next attack misses entirely', color: 0xfff3a0 },
   { id: 'slime', name: 'Sentient Slime Coating', adj: 'Gooey', tier: 2, damage: 1, blurb: 'knocks targets 4 tiles, bouncing off walls', color: 0x7fff7f },
+
+  // ---- Office Politics
+  { id: 'selfdoubt', name: 'Crippling Self-Doubt', adj: 'Self-Doubting', tier: 0, branch: 'politics', damage: 0, blurb: 'makes the target deal 2 less damage for 2 turns', color: 0x9b8fd6 },
+  { id: 'burrito', name: 'Frozen Breakroom Burrito', adj: 'Freezer-Burnt', tier: 0, branch: 'politics', damage: 0, blurb: 'freezes the target for 2 turns; the next hit shatters it for +2 damage', color: 0xbfe8ff },
+  { id: 'overtime', name: 'Mandatory Overtime', adj: 'Unpaid', tier: 0, branch: 'politics', damage: 1, blurb: 'halves the target movement for 3 turns', color: 0x6b6f7a },
+  { id: 'positivity', name: 'Toxic Positivity', adj: 'Relentlessly Positive', tier: 0, branch: 'politics', damage: 0, blurb: 'heals the target 1, but it is too cheerful to attack for 2 turns', color: 0xffd1e8 },
+  { id: 'cc', name: "Cc'd on Everything", adj: "Cc'd", tier: 0, branch: 'politics', damage: 1, blurb: 'also reaches the 2 nearest enemies: all take +1 damage for 2 turns', color: 0x7ab8ff },
+
+  // ---- Corporate Necromancy
+  { id: 'imposter', name: 'Imposter Syndrome', adj: 'Imposter', tier: 0, branch: 'necro', damage: 0, blurb: 'makes the other enemies think it is you, so they attack it for a turn', color: 0x5b3cc4 },
+  { id: 'restructure', name: 'Restructuring', adj: 'Restructured', tier: 0, branch: 'necro', damage: 0, blurb: 'reassigns the target to the far side of the room', color: 0x2f3a4a },
+  { id: 'committee', name: 'Death by Committee', adj: 'Committee-Approved', tier: 0, branch: 'necro', damage: 1, blurb: 'if the target dies within 3 turns, it explodes (3x3, 2 damage)', color: 0x7a2e3a },
+  { id: 'mould', name: 'Fridge Mould', adj: 'Mouldy', tier: 0, branch: 'necro', damage: 0, blurb: 'grows mould that spreads each turn and hurts whoever stands in it', color: 0x6f8a3a },
+  { id: 'warning', name: 'Final Written Warning', adj: 'Final', tier: 0, branch: 'necro', damage: 0, blurb: 'in 3 turns the target takes 4 damage. No appeals', color: 0x222222 },
 ];
 
 export const SIDES: SideDef[] = [
@@ -120,6 +155,20 @@ export const SIDES: SideDef[] = [
   { id: 'confetti', tier: 2, tag: 'Confetti', severity: 1, text: '...and spawns an unexploded confetti bomb on a random neighbouring tile.' },
   { id: 'again', tier: 2, tag: 'Echo', severity: 0, text: '...and makes the wizard sneeze again, repeating the spell backwards.' },
   { id: 'shatter', tier: 2, tag: 'Shatter', severity: 1, text: '...and shatters all nearby glass, showering the arena with shards.' },
+
+  // ---- Office Politics
+  { id: 'calendar', tier: 0, branch: 'politics', tag: 'Double-Booked', severity: 1, text: '...and double-books you: your next spell takes 1 turn longer to recharge.' },
+  { id: 'budget', tier: 0, branch: 'politics', tag: 'Budget Cuts', severity: 1, text: '...but with budget cuts: half damage, ready again next turn.' },
+  { id: 'desk', tier: 0, branch: 'politics', tag: 'Desk Fort', severity: 0, text: '...and builds a desk behind you to hide behind.' },
+  { id: 'teambuilding', tier: 0, branch: 'politics', tag: 'Team Building', severity: 1, text: '...and pulls every enemy 1 tile toward the target for a trust exercise.' },
+  { id: 'coffee', tier: 0, branch: 'politics', tag: 'Coffee Run', severity: 0, text: '...and sends you on a coffee run: you may move again this turn.' },
+
+  // ---- Corporate Necromancy
+  { id: 'blame', tier: 0, branch: 'necro', tag: 'Blame Shift', severity: 0, text: '...and blames the nearest enemy, whose coworkers rough it up for 1 damage.' },
+  { id: 'intern', tier: 0, branch: 'necro', tag: 'Intern', severity: 0, text: '...and summons an unpaid intern next to you who takes one hit, then quits.' },
+  { id: 'exit', tier: 0, branch: 'necro', tag: 'Exit Interview', severity: 2, text: '...and holds your exit interview early: -1 max HP for the rest of this floor.' },
+  { id: 'incident', tier: 0, branch: 'necro', tag: 'Incident', severity: 2, text: '...and resets "days since last accident" to 0: everyone, including you, takes 1 damage.' },
+  { id: 'sludge', tier: 0, branch: 'necro', tag: 'Sludge', severity: 1, text: '...and spills toxic sludge on 3 random tiles. HR has been notified.' },
 ];
 
 /** Flavour quips used in spell descriptions and the combat log. */
@@ -142,4 +191,13 @@ export const QUIPS = {
   goose: ['HONK.', 'HONK HONK.', 'The goose regrets nothing.', 'A goose has entered the chat.'],
   bump: ['BONK!', 'Clang!', 'Oof!', 'Thwump!'],
   wizardHurt: ['Ow, my dignity!', 'That will leave a mark on my CV.', 'Ouch! Worth it.', 'My beard!'],
+  /** the janitor's thoughts during the first floor of a run */
+  nervous: [
+    'Which end of the wand is the pointy end?',
+    "I'm sure this is in the manual somewhere.",
+    'The last Archmage had decades of experience. I have a mop.',
+    'If I keep casting, maybe nobody will ask for my credentials.',
+    'Note to self: find out what "mana" is.',
+    'Is it too late to go back to mopping?',
+  ],
 };

@@ -117,6 +117,40 @@ function makeGoose(): THREE.Group {
   return shadowed(g);
 }
 
+function makeGolem(): THREE.Group {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.5, 0.6), std(0xd8d8d8, { roughness: 0.5 }));
+  body.position.y = 0.45;
+  const tray = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 0.3), std(0x9a9a9a));
+  tray.position.set(0, 0.74, -0.05);
+  const paper = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.02, 0.36), std(0xffffff));
+  paper.position.set(0, 0.24, 0.32); paper.rotation.x = -0.5;
+  const light = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 4), new THREE.MeshBasicMaterial({ color: 0xff3b30 }));
+  light.position.set(0.25, 0.62, 0.31);
+  for (const x of [-0.22, 0.22]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.2, 0.14), std(0x6b6f7a));
+    leg.position.set(x, 0.1, 0); g.add(leg);
+  }
+  eyes(g, 0.55, 0.31, 0.1, 0.045);
+  g.add(body, tray, paper, light);
+  return shadowed(g);
+}
+
+function makeIntern(): THREE.Group {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 0.48, 10), std(0x9ad0ff));
+  body.position.y = 0.24;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), std(0xf0c9a0));
+  head.position.y = 0.6;
+  const lanyard = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.13, 0.02), std(0xffffff));
+  lanyard.position.set(0, 0.3, 0.19);
+  const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.12, 8), std(0x8b5a2b));
+  cup.position.set(0.22, 0.32, 0.05);
+  eyes(g, 0.63, 0.12, 0.05, 0.028);
+  g.add(body, head, lanyard, cup);
+  return shadowed(g);
+}
+
 // ---------------------------------------------------------------- prop meshes
 export function makeArmchair(): THREE.Group {
   const g = new THREE.Group();
@@ -214,6 +248,51 @@ function makeProp(kind: Prop['kind']): THREE.Group {
       g.add(b, fuse, spark);
       break;
     }
+    case 'plant': {
+      const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.15, 0.3, 10), std(0xb5651d));
+      pot.position.y = 0.15;
+      const soil = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.02, 10), std(0x3e2723));
+      soil.position.y = 0.3;
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.5, 5), std(0x6b5a2a));
+      stem.position.y = 0.55; stem.rotation.z = 0.25;
+      g.add(pot, soil, stem);
+      for (let i = 0; i < 5; i++) {
+        const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 4), std(i % 2 ? 0x8a7a3a : 0x6b5a2a, { flatShading: true }));
+        leaf.scale.set(1.4, 0.3, 0.8);
+        leaf.position.set(Math.cos(i * 1.3) * 0.16, 0.45 + i * 0.07, Math.sin(i * 1.3) * 0.16);
+        leaf.rotation.z = -0.8;
+        g.add(leaf);
+      }
+      break;
+    }
+    case 'bin': {
+      const box = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.55, 0.6), std(0x3d7be0));
+      box.position.y = 0.28;
+      const label = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.14), std(0xffffff));
+      label.position.set(0, 0.36, 0.305);
+      const glove = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.22), std(0xff9ad5));
+      glove.position.set(-0.12, 0.6, 0); glove.rotation.y = 0.5;
+      const scarf = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.035, 6, 10), std(0xfff27a));
+      scarf.position.set(0.15, 0.6, 0.05); scarf.rotation.x = Math.PI / 2;
+      g.add(box, label, glove, scarf);
+      break;
+    }
+    case 'desk': {
+      const top = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.08, 0.6), std(0x8b5a2b));
+      top.position.y = 0.6;
+      const front = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.5, 0.06), std(0x6d4320));
+      front.position.set(0, 0.32, 0.27);
+      for (const x of [-0.38, 0.38]) {
+        const side = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.56, 0.56), std(0x6d4320));
+        side.position.set(x, 0.3, 0); g.add(side);
+      }
+      const monitor = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.22, 0.04), std(0x222222));
+      monitor.position.set(0.1, 0.78, -0.1);
+      const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.09, 8), std(0xffffff));
+      mug.position.set(-0.25, 0.69, 0.05);
+      g.add(top, front, monitor, mug);
+      break;
+    }
   }
   return shadowed(g);
 }
@@ -297,6 +376,8 @@ const STATUS_ICON: [keyof Unit['status'], string, string][] = [
   ['vulnerable', '🙇', 'Vulnerable'], ['dot', '☕', 'Burning feet'], ['blind', '✨', 'Blinded'],
   ['slow', '🍬', 'Slowed'], ['rooted', '⚓', 'Rooted'], ['interrupted', '🫢', 'Hiccuping'],
   ['rust', '🟫', 'Rusted'], ['alerted', '❗', 'Alerted'], ['aggro', '💢', 'Aggro'], ['bees', '🐝', 'Bees'],
+  ['weak', '😔', 'Self-doubt'], ['frozen', '🧊', 'Frozen'], ['charmed', '🎭', 'Mistaken for you'],
+  ['doom', '📄', 'Final warning'], ['marked', '🗳️', 'Under committee review'], ['pinned', '📎', 'Stapled'],
 ];
 
 export class EntityView {
@@ -325,7 +406,8 @@ export class EntityView {
     for (const u of state.units) {
       if (!u.alive) continue;
       if (!this.unitMeshes.has(u.id)) {
-        const m = u.kind === 'wizard' ? makeWizard() : u.kind === 'guard' ? makeGuard() : u.kind === 'clerk' ? makeClerk() : u.kind === 'brute' ? makeBrute() : makeGoose();
+        const m = u.kind === 'wizard' ? makeWizard() : u.kind === 'guard' ? makeGuard() : u.kind === 'clerk' ? makeClerk()
+          : u.kind === 'brute' ? makeBrute() : u.kind === 'golem' ? makeGolem() : u.kind === 'intern' ? makeIntern() : makeGoose();
         m.userData.unitId = u.id;
         m.position.copy(tileToWorld(u.pos));
         m.rotation.y = facingToRot(u.facing);
@@ -352,7 +434,7 @@ export class EntityView {
         const m = makeProp(p.kind);
         m.userData.propId = p.id;
         m.position.copy(tileToWorld(p.pos));
-        m.rotation.y = ((p.id * 37) % 4) * (Math.PI / 2) * (p.kind === 'crate' || p.kind === 'obstacle' ? 1 : 0);
+        m.rotation.y = ((p.id * 37) % 4) * (Math.PI / 2) * (p.kind === 'crate' || p.kind === 'obstacle' || p.kind === 'bin' ? 1 : 0);
         this.sm.scene.add(m);
         this.propMeshes.set(p.id, m);
       }

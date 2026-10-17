@@ -13,14 +13,14 @@ export const DIRS: readonly Vec[] = [
 
 export const BOARD_SIZE = 8;
 
-export type HazardKind = 'grease' | 'water' | 'fire' | 'banana' | 'jelly' | 'shards';
+export type HazardKind = 'grease' | 'water' | 'fire' | 'banana' | 'jelly' | 'shards' | 'mould' | 'sludge';
 export interface Hazard {
   kind: HazardKind;
   /** turns remaining, -1 = permanent until something removes it */
   turns: number;
 }
 
-export type UnitKind = 'wizard' | 'guard' | 'clerk' | 'brute' | 'goose';
+export type UnitKind = 'wizard' | 'guard' | 'clerk' | 'brute' | 'goose' | 'golem' | 'intern';
 export type Team = 'player' | 'enemy' | 'neutral';
 export type AttackPattern = 'melee' | 'line' | 'sweep' | 'peck';
 
@@ -38,11 +38,18 @@ export interface Status {
   alerted: number;     // +1 move
   aggro: number;       // +1 atk (neon pink robes)
   bees: number;        // wizard only: bees sting at env phase
+  weak: number;        // crippling self-doubt: deals 2 less damage
+  frozen: number;      // frozen burrito: can't act; the next hit shatters for +2
+  charmed: number;     // imposter syndrome: other enemies attack it instead of you
+  doom: number;        // final written warning: takes 4 damage when this runs out
+  marked: number;      // death by committee: explodes (3x3, 2 dmg) if it dies while marked
+  pinned: number;      // stapled: can't move or be pushed
 }
 
 export const emptyStatus = (): Status => ({
   stun: 0, pacified: 0, enraged: 0, vulnerable: 0, dot: 0, blind: 0, slow: 0,
   rooted: 0, interrupted: 0, rust: 0, alerted: 0, aggro: 0, bees: 0,
+  weak: 0, frozen: 0, charmed: 0, doom: 0, marked: 0, pinned: 0,
 });
 
 export interface Unit {
@@ -62,13 +69,15 @@ export interface Unit {
   alive: boolean;
 }
 
-export type PropKind = 'obstacle' | 'pillar' | 'crate' | 'vase' | 'armchair' | 'cart' | 'confetti';
+export type PropKind = 'obstacle' | 'pillar' | 'crate' | 'vase' | 'armchair' | 'cart' | 'confetti' | 'plant' | 'bin' | 'desk';
 export interface Prop {
   id: number;
   kind: PropKind;
   pos: Vec;
   /** confetti bombs: turns until boom */
   fuse?: number;
+  /** unwatered office plant: the spell it goes off with */
+  spell?: import('../spells/SpellGenerator').Spell;
 }
 
 /** A lingering spell zone (e.g. Floating Disco Ball) that re-applies a payload each environment phase. */

@@ -21,12 +21,14 @@ export interface TurnHooks {
   wizardDied(): void;
 }
 
-const AVOID = new Set(['fire', 'shards', 'grease', 'banana']);
+const AVOID = new Set(['fire', 'shards', 'grease', 'banana', 'mould', 'sludge']);
 
 export class TurnManager {
   phase: Phase = 'player';
   hasMoved = false;
   hasCast = false;
+  /** Coffee Run granted before you moved: one more move after the first. */
+  private bonusMoves = 0;
 
   constructor(
     private state: GameState,
@@ -52,6 +54,7 @@ export class TurnManager {
   beginPlayerTurn() {
     this.hasMoved = false;
     this.hasCast = false;
+    this.bonusMoves = 0;
     this.refreshTelegraphs();
     this.setPhase('player');
     this.hooks.refresh();
@@ -109,6 +112,7 @@ export class TurnManager {
     this.setPhase('busy');
     this.hasMoved = true;
     await this.rules.walk(this.state.wizard, path);
+    if (this.bonusMoves > 0) { this.bonusMoves -= 1; this.hasMoved = false; }
     return this.afterPlayerAction();
   }
 
@@ -118,9 +122,13 @@ export class TurnManager {
     if (!valid) return false;
     this.setPhase('busy');
     this.hasCast = true;
-    spell.cooldownLeft = spell.cooldown;
+    spell.cooldownLeft = spell.cooldown + this.rules.takeCooldownPenalty();
     const res = await this.rules.castSpell(spell, this.state.wizard, target);
     const ok = await this.afterPlayerAction();
+    if (ok && res.extraMove && !res.endTurn) {
+      if (this.hasMoved) this.hasMoved = false; else this.bonusMoves += 1;
+      this.setPhase('player');
+    }
     if (ok && res.endTurn) await this.endTurn();
     return ok;
   }
@@ -170,6 +178,7 @@ export class TurnManager {
     const actors = this.state.units.filter(u => u.alive && u.team !== 'player').sort((a, b) => a.id - b.id);
     for (const e of actors) {
       if (!e.alive) continue;
+      if (e.kind === 'golem' || e.kind === 'intern') continue; // they just stand there and take it
       if (e.kind === 'goose') { await this.gooseTurn(e); }
       else await this.enemyTurn(e);
       this.refreshTelegraphs();
@@ -186,9 +195,17 @@ export class TurnManager {
       await this.sm.wait(250);
       return;
     }
+    if (e.status.frozen > 0) {
+      this.fx.floatText(w(), '🧊 frozen solid', 'status');
+      await this.sm.wait(250);
+      return;
+    }
     // 1) execute the telegraphed attack from current position/facing
     if (e.status.pacified > 0) {
       this.fx.floatText(w(), '🕊️ "after you!"', 'status');
+      await this.sm.wait(200);
+    } else if (e.status.charmed > 0) {
+      this.fx.floatText(w(), '🎭 "I am NOT the Archmage!"', 'status');
       await this.sm.wait(200);
     } else if (e.status.interrupted > 0) {
       this.fx.floatText(w(), '🫢 *hic* (attack cancelled)', 'status');
@@ -206,7 +223,7 @@ export class TurnManager {
   }
 
   private async aiMove(e: Unit) {
-    const wiz = this.state.wizard.pos;
+    const wiz = this.targetFor(e);
     let reach = this.reachable(e, true);
     if (reach.size === 0) reach = this.reachable(e, false);
     const candidates: { pos: Vec; path: Vec[] }[] = [{ pos: e.pos, path: [] }];
@@ -246,6 +263,16 @@ export class TurnManager {
     if (facing !== e.facing) { e.facing = facing; await this.view.face(e); }
   }
 
+  /** Who an enemy goes after: a Printer Jam Golem if there is one, then an "imposter", then you. */
+  private targetFor(e: Unit): Vec {
+    const near = (us: Unit[]) => us.sort((a, b) => manhattan(a.pos, e.pos) - manhattan(b.pos, e.pos))[0];
+    const golem = near(this.state.livingUnits().filter(u => u.kind === 'golem'));
+    if (golem) return golem.pos;
+    const imposter = near(this.state.enemies().filter(u => u !== e && u.status.charmed > 0));
+    if (imposter) return imposter.pos;
+    return this.state.wizard.pos;
+  }
+
   private async gooseTurn(g: Unit) {
     if (g.status.stun > 0) return;
     const steps = this.rng.int(0, 2);
@@ -268,10 +295,25 @@ export class TurnManager {
 
   private async environmentPhase() {
     const st = this.state;
-    // fire burns occupants
+    // fire, mould and sludge hurt whoever is standing in them
     for (const u of st.livingUnits()) {
-      if (st.hazardAt(u.pos)?.kind === 'fire') await this.rules.damage(u, 1, 'Lingering fire');
+      const hz = st.hazardAt(u.pos)?.kind;
+      if (hz === 'fire') await this.rules.damage(u, 1, 'Lingering fire');
+      else if (hz === 'mould') { this.fx.floatText(tileToWorld(u.pos, 1.5), '🦠 mouldy', 'status'); await this.rules.damage(u, 1, 'Fridge mould'); }
+      else if (hz === 'sludge') await this.rules.damage(u, 1, 'Toxic sludge');
     }
+    // final written warnings come due
+    for (const u of st.livingUnits()) {
+      if (u.status.doom > 0) {
+        u.status.doom -= 1;
+        if (u.status.doom === 0) {
+          this.fx.floatText(tileToWorld(u.pos, 1.7), '📄 TERMINATED', 'shout');
+          this.hooks.log(`${u.kind === 'wizard' ? 'Your' : u.name + "'s"} final written warning comes due.`, u.kind === 'wizard' ? 'bad' : 'good');
+          await this.rules.damage(u, 4, 'A final written warning');
+        }
+      }
+    }
+    if (!st.wizard.alive) return;
     // burning feet (coffee), bees
     for (const u of st.livingUnits()) {
       if (u.status.dot > 0) {
@@ -291,6 +333,8 @@ export class TurnManager {
     if (!st.wizard.alive) return;
 
     await this.rules.pulseZones();
+
+    await this.rules.spreadMould();
 
     // confetti fuses
     for (const p of [...st.props]) {
@@ -312,7 +356,7 @@ export class TurnManager {
     // status ticks
     for (const u of st.livingUnits()) {
       const s = u.status;
-      for (const k of ['stun', 'pacified', 'enraged', 'vulnerable', 'dot', 'slow', 'rooted', 'interrupted', 'alerted', 'aggro', 'bees'] as const) {
+      for (const k of ['stun', 'pacified', 'enraged', 'vulnerable', 'dot', 'slow', 'rooted', 'interrupted', 'alerted', 'aggro', 'bees', 'weak', 'frozen', 'charmed', 'marked', 'pinned'] as const) {
         if (s[k] > 0) s[k] -= 1;
       }
     }

@@ -47,10 +47,13 @@ const SIDE_SUFFIX: Record<string, string> = {
   apologize: 'of Remorse', swap: 'of Confusion', vase: 'of Insurance Claims', sound: 'of BOING',
   honey: 'of Buzzing', pink: 'of Fashion', cart: 'of Retail', trip: 'of Clumsiness',
   confetti: 'of Celebration', again: 'of Déjà Vu', shatter: 'of Breakage',
+  calendar: 'of Double-Booking', budget: 'of Austerity', desk: 'of Cubicle Defence', teambuilding: 'of Synergy',
+  coffee: 'of Caffeine', blame: 'of Plausible Deniability', intern: 'of Unpaid Labour', exit: 'of Severance',
+  incident: 'of Zero Days', sludge: 'of Liability',
 };
 
-const STRONG_DELIVERY = new Set(['anvil', 'coupon', 'disco', 'catapult', 'livestock', 'applause']);
-const STRONG_PAYLOAD = new Set(['embarrass', 'apology', 'dread', 'cabbage', 'slime', 'jelly']);
+const STRONG_DELIVERY = new Set(['anvil', 'coupon', 'disco', 'catapult', 'livestock', 'applause', 'replyall', 'golem', 'review', 'plant']);
+const STRONG_PAYLOAD = new Set(['embarrass', 'apology', 'dread', 'cabbage', 'slime', 'jelly', 'imposter', 'burrito', 'warning', 'restructure']);
 
 let spellUid = 1;
 
@@ -67,16 +70,22 @@ export class SpellGenerator {
 
   setBonuses(b: MetaBonuses) { this.bonuses = b; }
 
+  /** Office Politics / Corporate Necromancy components only appear once that Academy branch is bought. */
+  private allowed(c: { branch?: string }) {
+    if (!c.branch) return true;
+    return c.branch === 'politics' ? this.bonuses.officePolitics : this.bonuses.necromancy;
+  }
+
   generate(opts: GenOptions): Spell {
-    const dPool = DELIVERIES.filter(d => d.tier <= opts.deliveryTier);
+    const dPool = DELIVERIES.filter(d => d.tier <= opts.deliveryTier && this.allowed(d));
     // Bias toward newly unlocked components so upgrades feel noticeable.
     const weighted: DeliveryDef[] = [];
     for (const d of dPool) for (let i = 0; i < 1 + d.tier; i++) weighted.push(d);
     const delivery = opts.deliveryId
       ? DELIVERIES.find(d => d.id === opts.deliveryId)!
       : this.rng.pick(weighted);
-    const payload = this.rng.pick(PAYLOADS.filter(p => p.tier <= opts.payloadTier));
-    const side = this.rng.pick(SIDES.filter(s => s.tier <= opts.sideTier));
+    const payload = this.rng.pick(PAYLOADS.filter(p => p.tier <= opts.payloadTier && this.allowed(p)));
+    const side = this.rng.pick(SIDES.filter(s => s.tier <= opts.sideTier && this.allowed(s)));
     return this.compose(delivery, payload, side);
   }
 
@@ -84,6 +93,7 @@ export class SpellGenerator {
     const b = this.bonuses;
     let damage = delivery.baseDamage + payload.damage;
     if (side.id === 'recoil') damage += b.recoilDamage;
+    if (side.id === 'budget') damage = Math.floor(damage / 2);
 
     // ----- displacement summary
     const disp: string[] = [];
@@ -92,8 +102,13 @@ export class SpellGenerator {
       case 'turn': disp.push('Turn 180°'); break;
       case 'pullToCaster': disp.push('Pull to you'); break;
       case 'inward': disp.push('Pull inward 1'); break;
+      case 'pull': disp.push(`Pull ${delivery.displaceDist}`); break;
+      case 'outward': disp.push(`Shove out ${delivery.displaceDist}`); break;
       default: break;
     }
+    if (delivery.shape === 'dash') disp.push('You charge');
+    if (payload.id === 'restructure') disp.push('Reassigned');
+    if (side.id === 'teambuilding') disp.push('Enemies pulled 1');
     if (payload.id === 'soap') disp.push('Slide 3');
     if (payload.id === 'tickle') disp.push('Sidestep 1');
     if (payload.id === 'slime') disp.push('Bounce 4');
@@ -116,7 +131,9 @@ export class SpellGenerator {
     if (STRONG_PAYLOAD.has(payload.id)) cd += 1;
     if (side.severity >= 2) cd -= 1;
     if (side.severity === 0) cd += 1;
+    if (delivery.shape === 'global') cd += 1; // hitting the whole floor is a lot
     cd = Math.max(1, Math.min(4, cd));
+    if (side.id === 'budget') cd = 1;       // ready again on your next turn
 
     const name = `${payload.adj} ${delivery.noun} ${SIDE_SUFFIX[side.id] ?? ''}`.trim();
     const description =
@@ -127,7 +144,7 @@ export class SpellGenerator {
       delivery, payload, side, name,
       formula: `${delivery.name} + ${payload.name} + ${side.tag}`,
       range: delivery.range,
-      minRange: delivery.minRange ?? (delivery.shape === 'selfAoe' ? 0 : 1),
+      minRange: delivery.minRange ?? (delivery.shape === 'selfAoe' || delivery.shape === 'global' ? 0 : 1),
       pattern: delivery.pattern,
       damage,
       displacement: disp.join(' · ') || 'None',
@@ -158,7 +175,22 @@ export class SpellGenerator {
 // Geometry: target tiles and affected area
 // ======================================================================
 
-const LINE_SHAPES = new Set(['arc', 'path', 'pierce', 'flood', 'pull', 'projectile', 'stampede']);
+const LINE_SHAPES = new Set(['arc', 'path', 'pierce', 'flood', 'pull', 'projectile', 'stampede', 'dash']);
+
+/** Sticky-note chain: from the first victim, jump to the nearest unhit unit within 2 tiles, twice. */
+export function chainVictims(first: Unit, caster: Unit, state: GameState, jumps = 2): Unit[] {
+  const out = [first];
+  let cur = first;
+  for (let i = 0; i < jumps; i++) {
+    const next = state.livingUnits()
+      .filter(u => u !== caster && u.kind !== 'wizard' && !out.includes(u) && manhattan(u.pos, cur.pos) <= 2)
+      .sort((a, b) => manhattan(a.pos, cur.pos) - manhattan(b.pos, cur.pos) || a.id - b.id)[0];
+    if (!next) break;
+    out.push(next);
+    cur = next;
+  }
+  return out;
+}
 
 function straightLines(c: Vec, range: number): Vec[] {
   const out: Vec[] = [];
@@ -172,8 +204,11 @@ function straightLines(c: Vec, range: number): Vec[] {
 export function getTargetTiles(spell: Spell, caster: Unit, state: GameState): Vec[] {
   const c = caster.pos;
   const shape = spell.delivery.shape;
-  if (shape === 'selfAoe') return [{ ...c }];
+  if (shape === 'selfAoe' || shape === 'global') return [{ ...c }];
   if (shape === 'cone') return straightLines(c, 1);
+  if (shape === 'summon' || shape === 'trap') {
+    return state.allTiles().filter(p => { const d = manhattan(p, c); return d >= 1 && d <= spell.range && state.isFree(p); });
+  }
   if (shape === 'overhead') {
     return state.allTiles().filter(p => chebyshev(p, c) === 1);
   }
@@ -245,12 +280,41 @@ export function planSpell(spell: Spell, caster: Unit, target: Vec, state: GameSt
       }
       break;
     }
+    case 'dash': {
+      // ride toward the chosen tile; stop at (and ram) the first unit or prop in the way
+      const steps = manhattan(c, target);
+      for (let i = 1; i <= steps; i++) {
+        const p = vadd(c, vscale(d, i));
+        if (!inBounds(p)) break;
+        area.push(p);
+        primary = p;
+        if (state.unitAt(p) || state.propAt(p)) break;
+      }
+      break;
+    }
+    case 'global': {
+      area = state.enemies().map(u => ({ ...u.pos }));
+      primary = { ...c };
+      break;
+    }
+    case 'chain': {
+      const first = state.unitAt(target);
+      area = first && first !== caster ? chainVictims(first, caster, state).map(u => ({ ...u.pos })) : [target];
+      break;
+    }
+    case 'summon': case 'trap':
+      area = [target, ...DIRS.map(o => vadd(target, o))];
+      break;
   }
 
   area = area.filter(inBounds);
-  const hits = area
+  let hits = area
     .map(p => state.unitAt(p))
     .filter((u): u is Unit => !!u && u !== caster);
+  // a dash only rams the thing at the end of the ride; a summon or trap only affects what is next to it
+  if (spell.delivery.shape === 'dash') hits = hits.filter(u => veq(u.pos, primary));
+  if (spell.delivery.shape === 'summon' || spell.delivery.shape === 'trap') hits = hits.filter(u => !veq(u.pos, target));
+  if (spell.delivery.shape === 'trap') hits = []; // the plant waits for someone to walk by
   // Resolve far-to-near so pushes in a line don't collide with each other.
   hits.sort((a, b) => manhattan(b.pos, c) - manhattan(a.pos, c));
   // Caster can't be hit by own spell except via side effects.

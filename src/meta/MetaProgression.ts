@@ -1,6 +1,6 @@
 // "What persists across runs": Unstable Mana Residue + The Archmage Academy upgrade tree.
 
-export type BranchId = 'synergy' | 'elasticity' | 'mastery' | 'budget';
+export type BranchId = 'synergy' | 'elasticity' | 'mastery' | 'budget' | 'politics' | 'necro';
 
 export interface UpgradeNode {
   id: string;
@@ -19,6 +19,8 @@ export const BRANCHES: Branch[] = [
   { id: 'elasticity', name: 'Casting Elasticity', motto: 'Bounce back. Literally.' },
   { id: 'mastery', name: 'Component Mastery', motto: 'New ways to deliver chaos.' },
   { id: 'budget', name: 'Starting Budget', motto: 'Better stationery, better spells.' },
+  { id: 'politics', name: 'Office Politics', motto: 'Petty, effective, deniable.' },
+  { id: 'necro', name: 'Corporate Necromancy', motto: 'Nobody survives the quarterly review.' },
 ];
 
 export const UPGRADES: UpgradeNode[] = [
@@ -43,6 +45,10 @@ export const UPGRADES: UpgradeNode[] = [
   { id: 'grant', branch: 'budget', name: 'Embezzled Grant', costs: [24], levels: ['Starter spells draw from the full tier-3 pools'], requires: { id: 'petty', level: 1 } },
   { id: 'pocket', branch: 'budget', name: 'Extra Pocket', costs: [14], levels: ['Start each run with a 4th spell'] },
   { id: 'tenure', branch: 'budget', name: 'Tenure', costs: [8, 16], levels: ['+3 max HP', '+6 max HP'] },
+
+  // Office Politics / Corporate Necromancy: each unlocks 5 deliveries, 5 payloads and 5 side effects
+  { id: 'politics', branch: 'politics', name: 'Office Politics', costs: [10], levels: ['Unlocks Reply-All, Stapler, Swivel Chair, Sticky Note, Lost-and-Found; Self-Doubt, Frozen Burrito, Overtime, Toxic Positivity, Cc\'d; and 5 petty side effects'] },
+  { id: 'necro', branch: 'necro', name: 'Corporate Necromancy', costs: [20], levels: ['Unlocks Office Plant, Shredder, Printer Golem, Performance Review, Fire Drill; Imposter Syndrome, Restructuring, Death by Committee, Fridge Mould, Final Warning; and 5 dark side effects'], requires: { id: 'politics', level: 1 } },
 ];
 
 export interface MetaBonuses {
@@ -58,6 +64,8 @@ export interface MetaBonuses {
   starterTier: number;
   starterCount: number;
   bonusHp: number;
+  officePolitics: boolean;
+  necromancy: boolean;
 }
 
 interface SaveData {
@@ -66,6 +74,7 @@ interface SaveData {
   runs: number;
   bestFloor: number;
   lifetimeResidue: number;
+  memoSeen?: boolean;
 }
 
 const STORAGE_KEY = 'accidental-archmage-save-v1';
@@ -138,6 +147,8 @@ export class MetaProgression {
       starterTier: L('grant') ? 2 : L('petty') ? 1 : 0,
       starterCount: L('pocket') ? 4 : 3,
       bonusHp: L('tenure') * 3,
+      officePolitics: L('politics') > 0,
+      necromancy: L('necro') > 0,
     };
   }
 }

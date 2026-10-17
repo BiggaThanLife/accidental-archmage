@@ -6,7 +6,7 @@ import {
 let nextId = 1;
 export const newId = () => nextId++;
 
-export const BLOCKING_PROPS: PropKind[] = ['obstacle', 'pillar', 'crate', 'vase', 'armchair', 'cart', 'confetti'];
+export const BLOCKING_PROPS: PropKind[] = ['obstacle', 'pillar', 'crate', 'vase', 'armchair', 'cart', 'confetti', 'plant', 'bin', 'desk'];
 
 export interface UnitTemplate {
   name: string; hp: number; atk: number; def: number; move: number;
@@ -19,6 +19,8 @@ export const UNIT_TEMPLATES: Record<UnitKind, UnitTemplate> = {
   clerk: { name: 'Crossbow Clerk', hp: 3, atk: 2, def: 0, move: 2, attack: 'line', team: 'enemy' },
   brute: { name: 'Bureaucrat Brute', hp: 6, atk: 3, def: 1, move: 1, attack: 'sweep', team: 'enemy' },
   goose: { name: 'Confused Goose', hp: 3, atk: 1, def: 0, move: 2, attack: 'peck', team: 'neutral' },
+  golem: { name: 'Printer Jam Golem', hp: 4, atk: 0, def: 0, move: 0, attack: 'melee', team: 'neutral' },
+  intern: { name: 'Unpaid Intern', hp: 1, atk: 0, def: 0, move: 0, attack: 'melee', team: 'neutral' },
 };
 
 export class GameState {

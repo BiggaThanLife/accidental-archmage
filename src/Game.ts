@@ -11,6 +11,7 @@ import { TurnManager, Phase } from './game/TurnManager';
 import { DungeonGenerator } from './game/DungeonGenerator';
 import { Rng, Vec, key, veq, emptyStatus } from './game/types';
 import { Spell, SpellGenerator, getTargetTiles, planSpell } from './spells/SpellGenerator';
+import { QUIPS } from './spells/SpellComponents';
 import { MetaProgression } from './meta/MetaProgression';
 import { HUD } from './ui/HUD';
 
@@ -86,10 +87,20 @@ export class Game {
 
   // ------------------------------------------------------------ run lifecycle
   private showTitle() {
-    this.hud.showTitle(this.meta, () => this.startRun(), () => this.hud.showAcademy(this.meta, () => this.showTitle()));
+    this.hud.showTitle(this.meta, () => this.startRun(), () => this.hud.showAcademy(this.meta, () => this.showTitle()),
+      () => this.hud.showMemo(() => this.showTitle(), 'Back to the title'));
   }
 
+  /** The first time you enter the tower, HR explains (badly) what happened. */
   startRun() {
+    if (!this.meta.data.memoSeen) {
+      this.hud.showMemo(() => { this.meta.data.memoSeen = true; this.meta.save(); this.beginRun(); });
+      return;
+    }
+    this.beginRun();
+  }
+
+  private beginRun() {
     const b = this.meta.bonuses();
     this.rules.bonuses = b;
     this.gen.setBonuses(b);
@@ -103,6 +114,9 @@ export class Game {
       hand: this.gen.starterHand(b.starterCount, b.deliveryTier, b.starterTier),
       lastHit: 'You were overwhelmed by paperwork.',
     };
+    this.rules.exitInterviewLoss = 0;
+    this.rules.pendingCooldownPenalty = 0;
+    this.nervous = this.rng.shuffle([...QUIPS.nervous]);
     this.hud.clearLog();
     this.hud.log('You accept the post of Archmage. Nobody checked your references.', 'info');
     this.hud.hideOverlay();
@@ -115,6 +129,9 @@ export class Game {
     const wiz = this.state.wizard;
     wiz.status = emptyStatus();
     wiz.alive = true;
+    // the Exit Interview penalty only lasts for the floor it happened on
+    wiz.maxHp += this.rules.exitInterviewLoss;
+    this.rules.exitInterviewLoss = 0;
     this.view.clearAll();
     const info = this.dungeon.generate(this.state, run.floor);
     this.state.floor = run.floor;
@@ -201,6 +218,8 @@ export class Game {
         if (this.lastCooldownTurn !== this.state.turn) {
           this.lastCooldownTurn = this.state.turn;
           if (this.state.turn > 1) this.run.hand.forEach(s => (s.cooldownLeft = Math.max(0, s.cooldownLeft - 1)));
+          // the janitor is not coping, at least for the first few turns
+          if (this.run.floor === 1 && this.state.turn <= 3 && this.nervous.length) this.hud.log(`<i>"${this.nervous.shift()}"</i>`, 'info');
         }
       }
       if (this.selected >= 0 && (this.turns.hasCast || this.run!.hand[this.selected].cooldownLeft > 0)) this.selected = -1;
@@ -209,6 +228,7 @@ export class Game {
     this.refresh();
   }
   private lastCooldownTurn = -1;
+  private nervous: string[] = [];
 
   // ------------------------------------------------------------ selection & highlights
   private selectSpell(i: number) {
@@ -332,7 +352,9 @@ export class Game {
     if (u) {
       const intent = u.team === 'enemy'
         ? (this.rules.telegraphFor(u).length ? { melee: 'Strikes the tile in front', line: 'Fires a bolt up to 4 tiles ahead', sweep: 'Sweeps 3 tiles in front', peck: '' }[u.attack] : 'Not attacking next turn')
-        : u.kind === 'goose' ? 'Wanders. Pecks anyone adjacent.' : 'That is you.';
+        : u.kind === 'goose' ? 'Wanders. Pecks anyone adjacent.'
+        : u.kind === 'golem' ? 'Every enemy must attack it until it breaks.'
+        : u.kind === 'intern' ? 'Takes one hit for you, then quits.' : 'That is you.';
       const st = this.view.statusList(u);
       parts.push(`<b>${u.name}</b> <span class="mono">${u.hp}/${u.maxHp} HP · ATK ${u.atk}${u.def ? ` · DEF ${u.def}` : ''}</span><span>${intent}</span>${st.length ? `<span class="mono">${st.join(' · ')}</span>` : ''}`);
     }
@@ -345,6 +367,9 @@ export class Game {
         armchair: 'Your armchair. Cover from bolts. Very comfy.',
         cart: 'Floating shopping cart — absorbs one hit.',
         confetti: 'Confetti bomb — goes off at the end of the round (3x3, 1 dmg).',
+        plant: 'Unwatered office plant — snaps when an enemy steps next to it, hitting everything around it except you.',
+        bin: 'Lost-and-Found Bin — cover. Breaks if hit hard.',
+        desk: 'Your desk fort — cover. Breaks if hit hard.',
       };
       parts.push(`<span>${pd[p.kind]}</span>`);
     }
@@ -356,6 +381,8 @@ export class Game {
         banana: 'Banana peel — one free slide, then it is gone.',
         jelly: 'Jellybeans — sticky; halves movement.',
         shards: 'Pottery shards — 1 damage on entry.',
+        mould: 'Fridge mould — 1 damage each round to whoever stands here. Spreads. Fire clears it.',
+        sludge: 'Toxic sludge — 1 damage on entry and each round.',
       };
       parts.push(`<span>${hd[h.kind]}${h.turns > 0 ? ` (${h.turns} turns)` : ''}</span>`);
     }

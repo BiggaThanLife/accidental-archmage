@@ -25,6 +25,8 @@ const HAZARD_COLORS: Record<HazardKind, number> = {
   banana: 0xffe14a,
   jelly: 0xff6fb5,
   shards: 0xbff4ff,
+  mould: 0x6f8a3a,
+  sludge: 0x7cdb2a,
 };
 
 /**
@@ -214,8 +216,8 @@ export class GridBoard {
       new THREE.CircleGeometry(0.44, 20).rotateX(-Math.PI / 2),
       new THREE.MeshStandardMaterial({
         color, roughness: kind === 'grease' ? 0.15 : 0.5, metalness: kind === 'grease' ? 0.3 : 0,
-        transparent: true, opacity: kind === 'water' ? 0.7 : 0.9, emissive: kind === 'fire' ? 0xff3300 : 0x000000,
-        emissiveIntensity: kind === 'fire' ? 1.2 : 0,
+        transparent: true, opacity: kind === 'water' ? 0.7 : 0.9, emissive: kind === 'fire' ? 0xff3300 : kind === 'sludge' ? 0x2a6a00 : 0x000000,
+        emissiveIntensity: kind === 'fire' ? 1.2 : kind === 'sludge' ? 0.5 : 0,
       }),
     );
     base.scale.set(1 + rnd(1) * 0.12, 1, 0.85 + rnd(2) * 0.15);
@@ -259,6 +261,19 @@ export class GridBoard {
         s.position.set((rnd(i + 50) - 0.5) * 0.7, 0.04, (rnd(i + 60) - 0.5) * 0.7);
         s.rotation.set(rnd(i), rnd(i + 1), rnd(i + 2));
         g.add(s);
+      }
+    } else if (kind === 'mould') {
+      const cols = [0x4a5a2a, 0x9fbf5a, 0xe8f0c8];
+      for (let i = 0; i < 6; i++) {
+        const b = new THREE.Mesh(new THREE.CircleGeometry(0.05 + rnd(i + 70) * 0.06, 8).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: cols[i % 3], roughness: 0.9 }));
+        b.position.set((rnd(i + 71) - 0.5) * 0.6, 0.004 + i * 0.001, (rnd(i + 72) - 0.5) * 0.6);
+        g.add(b);
+      }
+    } else if (kind === 'sludge') {
+      for (let i = 0; i < 4; i++) {
+        const b = new THREE.Mesh(new THREE.SphereGeometry(0.05 + rnd(i + 80) * 0.03, 8, 6), new THREE.MeshStandardMaterial({ color: 0xb6ff4a, emissive: 0x2a6a00, emissiveIntensity: 0.6, roughness: 0.2 }));
+        b.position.set((rnd(i + 81) - 0.5) * 0.5, 0.03, (rnd(i + 82) - 0.5) * 0.5);
+        g.add(b);
       }
     } else if (kind === 'grease') {
       const b = new THREE.Mesh(new THREE.CircleGeometry(0.12, 10).rotateX(-Math.PI / 2), base.material);

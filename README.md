@@ -61,8 +61,18 @@ src/
 **Spells.** `SpellGenerator.compose()` derives name, range, area pattern, damage, displacement summary, cooldown
 and a description from the three components. `getTargetTiles()` and `planSpell()` compute what can be targeted and
 what gets hit for each delivery shape (cone, homing, overhead, 3-wide arc, 2x2 splash, 3x3 zone, piercing line,
-projectile, pull, lob, stampede, self-centred). All 17 deliveries, 15 payloads and 15 side effects from the
-extended library are implemented; tier 0 is the core seed set from the design brief.
+projectile, pull, lob, stampede, self-centred, whole-floor, charge, chain, summon, trap). There are 27 deliveries,
+25 payloads and 25 side effects (16,875 combinations); tier 0 is the core seed set from the design brief.
+
+**Office Politics and Corporate Necromancy.** Two Academy branches (10 and 20 residue) each unlock 5 deliveries,
+5 payloads and 5 side effects in a petty-office or dark-humour tone, built around tactical effects: a decoy every
+enemy must attack (Printer Jam Golem), traps (Unwatered Office Plant), chains, executions (Performance Review),
+charges, freezes that shatter for extra damage, delayed damage (Final Written Warning), death explosions, spreading
+mould, enemies turned on each other (Imposter Syndrome), and side effects that grant a second move, a desk to hide
+behind or an intern who takes a hit. Their components carry a `branch` field and only enter the pools once bought.
+
+**Onboarding.** The first time you enter the tower, an HR memo explains that you are the janitor and have not been
+trained; it can be re-read from How to play. The janitor's nervous thoughts appear in the log on the first floor.
 
 **Telegraphs.** Enemies store an attack *pattern* and *facing*, not fixed tiles. Red tiles are recomputed whenever
 anything moves, so shoving, sliding or turning an enemy (Gossip Wave turns them 180°) redirects its attack, often into

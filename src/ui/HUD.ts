@@ -200,7 +200,7 @@ export class HUD {
 
   hideOverlay() { this.el['overlay'].hidden = true; this.el['overlay'].innerHTML = ''; }
 
-  showTitle(meta: MetaProgression, onStart: () => void, onAcademy: () => void) {
+  showTitle(meta: MetaProgression, onStart: () => void, onAcademy: () => void, onMemo: () => void) {
     const d = meta.data;
     const o = this.showOverlay(`
       <div class="title-card">
@@ -225,11 +225,31 @@ export class HUD {
             <li>Grease makes things slide. Water conducts electric spells. Cabbage crates explode. Vases are overpriced.</li>
             <li>When you die you keep your <b>Unstable Mana Residue</b> to spend at the Academy.</li>
             <li>On touch screens: tap a tile to preview, then press <b>Cast here</b> or <b>Walk here</b> (or tap near the same tile again). Near-misses snap to the closest valid tile.</li>
+            <li>The Academy's <b>Office Politics</b> and <b>Corporate Necromancy</b> branches add 30 petty and dark spell components.</li>
           </ul>
+          <button class="secondary memo-link" id="t-memo">Re-read the HR memo</button>
         </details>
       </div>`);
     o.querySelector('#t-start')!.addEventListener('click', onStart);
     o.querySelector('#t-academy')!.addEventListener('click', onAcademy);
+    o.querySelector('#t-memo')!.addEventListener('click', onMemo);
+  }
+
+  /** The janitor's onboarding: shown once before the first run, and again from How to play. */
+  showMemo(onDone: () => void, doneLabel = 'Sign here (reluctantly)') {
+    const o = this.showOverlay(`
+      <div class="memo">
+        <div class="memo-head">
+          <span class="eyebrow">Memo · Human Resources, Tower Administration</span>
+          <h2>RE: Your promotion</h2>
+        </div>
+        <p>Due to a clerical error (Form 27-B, misfiled), you are now the <b>Archmage</b>. Your predecessor is "on leave." Do not ask.</p>
+        <p>You have not been trained. The spellbook is mostly sticky notes. Spells are assembled from whatever was in the supply closet, and they will do <em>roughly</em> what they say.</p>
+        <p>Please do not die on company time.</p>
+        <p class="memo-sign">— HR<br/><span>cc: Facilities, Legal, your next of kin</span></p>
+        <div class="title-actions"><button class="primary" id="m-ok">${esc(doneLabel)}</button></div>
+      </div>`);
+    o.querySelector('#m-ok')!.addEventListener('click', onDone);
   }
 
   showReward(floor: number, gained: number, options: Spell[], handFull: boolean, onPick: (i: number) => void, onNap: () => void) {

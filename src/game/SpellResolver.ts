@@ -22,12 +22,19 @@ export interface RuleHooks {
   refresh(): void;
 }
 
-export interface CastResult { endTurn: boolean }
+export interface CastResult { endTurn: boolean; extraMove?: boolean }
 
 const SLIPPERY = new Set(['grease', 'banana']);
+const MOULD_CAP = 14;
 
 export class Rules {
   private zoneMeshes = new Map<number, THREE.Object3D>();
+  /** Calendar Conflict: added to the cooldown of the next spell you cast. */
+  pendingCooldownPenalty = 0;
+  /** Exit Interview: max HP lost on this floor (given back on the next floor). */
+  exitInterviewLoss = 0;
+  /** Coffee Run: set during a cast when the wizard gets a second move. */
+  private grantExtraMove = false;
 
   constructor(
     public state: GameState,
@@ -55,6 +62,12 @@ export class Rules {
     if (u.status.enraged > 0) dmg += 1;
     if (u.status.vulnerable > 0) dmg += 1;
     dmg += u.status.rust;
+    if (u.status.frozen > 0) {
+      u.status.frozen = 0;
+      dmg += 2;
+      this.fx.floatText(this.uw(u, 1.6), '🧊 SHATTER!', 'bonk');
+      this.fx.burst(this.uw(u, 0.6), [0xbfe8ff, 0xffffff], { count: 14, shape: 'tet', speed: 3 });
+    }
     const def = u.status.enraged > 0 ? 0 : u.def;
     dmg = Math.max(0, dmg - def);
     if (dmg === 0) {
@@ -80,14 +93,29 @@ export class Rules {
     } else if (u.kind === 'goose') {
       this.hooks.log('The goose departs in a cloud of feathers and spite.', 'info');
       this.fx.burst(tileToWorld(u.pos, 0.4), [0xffffff, 0xeeeeee], { count: 20, shape: 'flat', gravity: 2, up: 3 });
+    } else if (u.kind === 'golem') {
+      this.hooks.log('The Printer Jam Golem finally clears. PC LOAD LETTER.', 'info');
+      this.fx.burst(tileToWorld(u.pos, 0.5), [0xffffff, 0xd8d8d8], { count: 24, shape: 'flat', gravity: 2, up: 4 });
+    } else if (u.kind === 'intern') {
+      this.hooks.log('The intern quits. They were never paid anyway.', 'info');
     }
     this.sync();
+    if (u.status.marked > 0) {
+      u.status.marked = 0;
+      const w = tileToWorld(u.pos, 0.5);
+      this.fx.burst(w, [0x7a2e3a, 0xffffff, 0x222222], { count: 26, shape: 'flat', speed: 4, up: 4 });
+      this.fx.ring(w, 0xff3b30, 2.6);
+      this.sm.addShake(0.3);
+      this.hooks.log(`The committee approves ${u.name}'s explosive resignation.`, 'boom');
+      await this.blast(u.pos, 2, 'Death by Committee', false);
+    }
   }
 
   // ================================================================ movement & physics
   /** Knock a unit `dist` tiles in `dir`. Bumping into things hurts both parties. */
   async push(u: Unit, dir: Dir, dist: number, opts: { mode?: 'knock' | 'slide' | 'fly'; bounce?: boolean; noBumpDamage?: boolean } = {}) {
     if (!u.alive || dist <= 0) return;
+    if (u.status.pinned > 0) { this.fx.floatText(this.uw(u, 1.4), '📎 stapled!', 'info'); return; }
     let d = dir;
     let blocked = false;
     for (let i = 0; i < dist && u.alive; i++) {
@@ -144,9 +172,14 @@ export class Rules {
 
   /** Hazard effects when a unit lands on a tile. */
   async onEnter(u: Unit) {
+    if (!u.alive) return;
+    await this.checkTraps(u);
     const hz = this.state.hazardAt(u.pos);
     if (!hz || !u.alive) return;
-    if (hz.kind === 'fire') {
+    if (hz.kind === 'sludge') {
+      this.fx.floatText(this.uw(u, 1.3), 'toxic!', 'bonk');
+      await this.damage(u, 1, 'Toxic sludge');
+    } else if (hz.kind === 'fire') {
       this.fx.floatText(this.uw(u, 1.3), 'HOT!', 'bonk');
       await this.damage(u, 1, 'Disco fire');
     } else if (hz.kind === 'shards') {
@@ -199,8 +232,71 @@ export class Rules {
       case 'armchair':
         if (dmg >= 3) { this.fx.burst(this.view.propWorld(p), [0xb23a48, 0x4e342e], { count: 14, shape: 'cube' }); this.state.removeProp(p); this.sync(); }
         return;
+      case 'plant': return this.triggerPlant(p);
+      case 'bin': case 'desk':
+        if (dmg >= 2) {
+          this.fx.burst(this.view.propWorld(p), p.kind === 'bin' ? [0x3d7be0, 0xfff27a, 0xff9ad5] : [0x8b5a2b, 0x5d4037], { count: 14, shape: 'cube' });
+          this.hooks.log(p.kind === 'bin' ? 'The Lost-and-Found Bin bursts. Forty single gloves are finally free.' : 'Your desk fort collapses. The stapler survives.', 'info');
+          this.state.removeProp(p); this.sync();
+        }
+        return;
       default: return;
     }
+  }
+
+  // ---------------------------------------------------------------- unwatered office plant (trap)
+  private async checkTraps(u: Unit) {
+    if (u.team !== 'enemy' || !u.alive) return;
+    for (const p of this.state.props.filter(o => o.kind === 'plant' && chebyshev(o.pos, u.pos) <= 1)) {
+      await this.triggerPlant(p);
+    }
+  }
+
+  private async triggerPlant(p: Prop) {
+    if (!this.state.props.includes(p)) return;
+    this.state.removeProp(p);
+    this.sync();
+    const w = tileToWorld(p.pos, 0.5);
+    this.fx.burst(w, [0x8a7a3a, 0x6b4f1d, 0xa5d66f], { count: 30, shape: 'leaf', speed: 4, up: 4 });
+    this.fx.ring(w, 0xa5d66f, 2.6);
+    this.fx.floatText(w.clone().setY(1.6), 'SNAP!', 'shout');
+    this.sm.addShake(0.25);
+    this.hooks.log('The unwatered ficus finally snaps. It had been waiting for this.', 'boom');
+    const spell = p.spell;
+    const dmg = spell ? spell.damage : 2;
+    const victims = this.state.livingUnits().filter(u => u.kind !== 'wizard' && chebyshev(u.pos, p.pos) <= 1);
+    for (const u of victims) {
+      await this.damage(u, dmg, spell?.name ?? 'A dead ficus');
+      if (u.alive && spell) this.applyStatus(spell, u);
+    }
+    if (spell?.payload.id === 'mould') this.seedMould(p.pos);
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const pr = this.state.propAt({ x: p.pos.x + dx, y: p.pos.y + dy });
+      if (pr && pr !== p) await this.hitProp(pr, dmg, 'ficus shrapnel');
+    }
+  }
+
+  // ---------------------------------------------------------------- fridge mould & sludge
+  private seedMould(c: Vec) {
+    const tiles = [c, ...DIRS.map(o => vadd(c, o))].filter(t => inBounds(t));
+    const pick = [c, this.rng.pick(tiles)];
+    for (const t of pick) this.setTileHazard(t, 'mould', 5);
+    this.sync();
+  }
+
+  /** Environment phase: each mould patch creeps onto one neighbouring tile. */
+  async spreadMould() {
+    const st = this.state;
+    const mould = [...st.hazards.entries()].filter(([, h]) => h.kind === 'mould').map(([k]) => { const [x, y] = k.split(',').map(Number); return { x, y }; });
+    let count = mould.length;
+    for (const m of mould) {
+      if (count >= MOULD_CAP) break;
+      const opts = DIRS.map(o => vadd(m, o)).filter(t => inBounds(t) && !st.hazardAt(t) && !(st.propAt(t) && st.propAt(t)!.kind !== 'vase'));
+      if (!opts.length) continue;
+      st.setHazard(this.rng.pick(opts), 'mould', 5);
+      count++;
+    }
+    if (mould.length) this.sync();
   }
 
   async explodeCrate(p: Prop) {
@@ -294,7 +390,7 @@ export class Rules {
     for (const u of victims) await this.damage(u, dmg, source);
   }
 
-  setTileHazard(t: Vec, kind: 'grease' | 'water' | 'banana' | 'jelly' | 'shards', turns: number) {
+  setTileHazard(t: Vec, kind: 'grease' | 'water' | 'banana' | 'jelly' | 'shards' | 'mould' | 'sludge', turns: number) {
     if (!inBounds(t)) return;
     const pr = this.state.propAt(t);
     if (pr && pr.kind !== 'vase' && pr.kind !== 'crate') return;
@@ -307,7 +403,7 @@ export class Rules {
   // ================================================================ enemy attacks
   telegraphFor(u: Unit, pos: Vec = u.pos, facing: Dir = u.facing): Vec[] {
     if (!u.alive || u.team !== 'enemy') return [];
-    if (u.status.stun > 0 || u.status.pacified > 0 || u.status.interrupted > 0) return [];
+    if (u.status.stun > 0 || u.status.pacified > 0 || u.status.interrupted > 0 || u.status.frozen > 0 || u.status.charmed > 0) return [];
     const f = DIRS[facing];
     const front = vadd(pos, f);
     switch (u.attack) {
@@ -349,7 +445,8 @@ export class Rules {
       this.hooks.log(`${u.name} swings blindly through a cloud of glitter.`, 'info');
       return;
     }
-    const atk = u.atk + (u.status.enraged > 0 ? 2 : 0) + (u.status.aggro > 0 ? 1 : 0);
+    const atk = Math.max(0, u.atk + (u.status.enraged > 0 ? 2 : 0) + (u.status.aggro > 0 ? 1 : 0) - (u.status.weak > 0 ? 2 : 0));
+    if (u.status.weak > 0) this.fx.floatText(this.uw(u, 1.6), atk ? '😔 half-hearted' : '😔 "what\'s the point"', 'status');
     for (const t of tiles) {
       const target = this.state.unitAt(t);
       if (target && target !== u) {
@@ -365,8 +462,9 @@ export class Rules {
   async castSpell(spell: Spell, caster: Unit, target: Vec, echo = false): Promise<CastResult> {
     const plan = planSpell(spell, caster, target, this.state);
     if (!plan) return { endTurn: false };
-    if (!echo) this.hooks.log(`<b>${spell.name}</b> — ${spell.formula}. ${spell.flavor}`, 'cast');
-    if (caster.facing !== plan.dir && spell.delivery.shape !== 'selfAoe') { caster.facing = plan.dir; await this.view.face(caster); }
+    if (!echo) { this.grantExtraMove = false; this.hooks.log(`<b>${spell.name}</b> — ${spell.formula}. ${spell.flavor}`, 'cast'); }
+    const selfCentred = spell.delivery.shape === 'selfAoe' || spell.delivery.shape === 'global';
+    if (caster.facing !== plan.dir && !selfCentred) { caster.facing = plan.dir; await this.view.face(caster); }
 
     await this.animateDelivery(spell, caster, plan);
     await this.resolveImpact(spell, caster, plan);
@@ -374,8 +472,11 @@ export class Rules {
     let endTurn = false;
     if (!echo && caster.alive) endTurn = await this.sideEffect(spell, caster, plan);
     this.sync();
-    return { endTurn };
+    return { endTurn, extraMove: !echo && this.grantExtraMove };
   }
+
+  /** The Calendar Conflict penalty is spent on the next spell you cast. */
+  takeCooldownPenalty() { const p = this.pendingCooldownPenalty; this.pendingCooldownPenalty = 0; return p; }
 
   private async animateDelivery(spell: Spell, caster: Unit, plan: SpellPlan) {
     const d = spell.delivery;
@@ -399,7 +500,25 @@ export class Rules {
         this.fx.floatText(this.uw(caster, 1.6), '"Did you hear...?"', 'shout');
         await Promise.all(plan.area.map(p => this.fx.ring(tileToWorld(p, 0.1), 0xff9ad5, 1.2, 400)));
         break;
+      case 'global':
+        this.fx.floatText(this.uw(caster, 1.6), '📧 REPLY ALL', 'shout');
+        await Promise.all(plan.area.map(p => this.fx.ring(tileToWorld(p, 0.1), 0x7ab8ff, 1.4, 420)));
+        break;
+      case 'dash':
+        this.fx.floatText(this.uw(caster, 1.6), 'WHEEEE!', 'shout');
+        break;
+      case 'chain': {
+        const note = makeDeliveryMesh('coupon', d.color);
+        await this.fx.projectile(note, from, to, 0.6, 320, true);
+        if (plan.area.length > 1) await this.fx.zap(plan.area.map(p => tileToWorld(p, 0.7)));
+        break;
+      }
       case 'selfAoe':
+        if (d.id === 'firedrill') {
+          this.fx.floatText(this.uw(caster, 1.6), '🔔 EVERYONE OUT!', 'shout');
+          await this.fx.ring(from.clone().setY(0.1), 0xff5a36, 5, 450);
+          break;
+        }
         this.fx.floatText(this.uw(caster, 1.6), '♪ wheeeze ♪', 'shout');
         await Promise.all([this.fx.ring(from.clone().setY(0.1), 0x8b5a2b, 5, 500), this.fx.ring(from.clone().setY(0.1), 0xffd34d, 3.5, 400)]);
         break;
@@ -432,15 +551,43 @@ export class Rules {
     const hits = plan.hits.filter(u => u.alive);
     if (d.displace === 'inward') hits.reverse(); // near first
 
+    // --- 0. Swivel Chair Joust: ride up to whatever you are about to ram
+    if (d.shape === 'dash') {
+      const end = plan.area[plan.area.length - 1];
+      const rams = !!end && (!!this.state.unitAt(end) || !!this.state.propAt(end));
+      const ride = rams ? plan.area.slice(0, -1) : plan.area;
+      for (const step of ride) {
+        if (!caster.alive || this.state.isBlocked(step, caster)) break;
+        caster.pos = { ...step };
+        await this.view.moveUnit(caster, step, 'slide', 110);
+        await this.onEnter(caster);
+      }
+      this.sync();
+      if (rams) { this.fx.floatText(tileToWorld(end, 1.3), 'RAMMED!', 'bonk'); this.sm.addShake(0.2); }
+    }
+
     // --- 1. payload status + damage on each hit unit
     for (const u of hits) {
       if (!u.alive) continue;
+      if (d.id === 'review' && u.hp <= 2 && u.kind !== 'wizard') {
+        this.fx.floatText(this.uw(u, 1.6), '📋 LET GO', 'shout');
+        this.hooks.log(`${u.name}'s performance review concludes that their role is no longer required.`, 'good');
+        await this.kill(u, spell.name);
+        continue;
+      }
       const dmg = pl.id === 'cabbage' ? d.baseDamage + (spell.side.id === 'recoil' ? b.recoilDamage : 0) : spell.damage;
+      // marked before the hit, so a committee victim killed by this very spell still explodes
+      if (pl.id === 'committee') u.status.marked = Math.max(u.status.marked, 3);
       await this.damage(u, dmg, spell.name);
       if (!u.alive) continue;
       this.applyStatus(spell, u);
       if (d.id === 'anvil') { u.status.rooted = Math.max(u.status.rooted, 1); await this.view.squash(u); }
       if (d.id === 'coupon') { u.status.stun = Math.max(u.status.stun, 1); this.fx.floatText(this.uw(u, 1.5), 'reading fine print…', 'info'); }
+      if (d.id === 'stapler') {
+        u.status.pinned = Math.max(u.status.pinned, 2); u.status.rooted = Math.max(u.status.rooted, 2);
+        this.fx.floatText(this.uw(u, 1.5), 'ka-CHUNK 📎', 'shout');
+        await this.view.squash(u);
+      }
       if (d.electric && this.state.hazardAt(u.pos)?.kind === 'water') await this.shock(u.pos, 2, spell.name);
     }
     if (d.electric) {
@@ -475,7 +622,19 @@ export class Rules {
           await this.push(u, dirTo(u.pos, caster.pos), 1, { mode: 'slide' });
           break;
         }
+        case 'pull': {
+          const dist = Math.min(d.displaceDist, Math.max(0, manhattan(u.pos, caster.pos) - 1));
+          if (dist > 0) { this.fx.floatText(this.uw(u, 1.5), 'shhhrrrRRRK', 'shout'); await this.push(u, dirTo(u.pos, caster.pos), dist, { mode: 'slide' }); }
+          break;
+        }
+        case 'outward':
+          await this.push(u, dirTo(caster.pos, u.pos), d.displaceDist);
+          break;
       }
+    }
+    if (d.id === 'replyall') {
+      for (const e of this.state.enemies()) e.status.alerted = Math.max(e.status.alerted, 1);
+      this.hooks.log('Everyone on the floor has been replied to. They are all very motivated now (+1 move).', 'bad');
     }
 
     // --- 3. payload displacement
@@ -488,6 +647,18 @@ export class Rules {
         await this.push(u, side, 1, { mode: 'knock', noBumpDamage: true });
       }
       if (pl.id === 'slime') await this.push(u, dirTo(caster.pos, u.pos), 4, { mode: 'knock', bounce: true });
+      if (pl.id === 'restructure' && u.kind !== 'wizard' && u.status.pinned <= 0) {
+        const free = this.state.allTiles().filter(t => this.state.isFree(t) && !this.state.hazardAt(t));
+        free.sort((a, c) => manhattan(c, caster.pos) - manhattan(a, caster.pos));
+        const spot = free.length ? this.rng.pick(free.slice(0, 3)) : null;
+        if (spot) {
+          this.fx.floatText(this.uw(u, 1.5), '📦 reassigned', 'status');
+          u.pos = { ...spot };
+          await this.view.moveUnit(u, spot, 'fly');
+          await this.onEnter(u);
+          this.sync();
+        }
+      }
     }
 
     // --- 4. tile payloads
@@ -524,7 +695,31 @@ export class Rules {
       await this.blast(plan.primary, 2 + b.cabbageDmg, spell.name, false);
     }
 
+    if (pl.id === 'mould' && d.shape !== 'trap') {
+      this.seedMould(plan.primary);
+      this.fx.burst(tileToWorld(plan.primary, 0.3), [0x6f8a3a, 0x9fbf5a, 0x4a5a2a], { count: 16, speed: 1.5 });
+      this.hooks.log('Something in the office fridge has gained sentience and a growth plan.', 'info');
+    }
+
     // --- 5. delivery tile effects + props in the area
+    if (d.id === 'golem' && this.state.isFree(plan.primary)) {
+      const g = this.state.makeUnit('golem', plan.primary, dirTo(plan.primary, caster.pos));
+      this.sync();
+      const m = this.view.unitMeshes.get(g.id);
+      if (m) { m.position.y = 4; await this.sm.tween(320, t => { m.position.y = 4 * (1 - t); }); m.position.y = 0; }
+      this.sm.addShake(0.2);
+      this.fx.floatText(this.uw(g, 1.4), 'PC LOAD LETTER', 'shout');
+      this.hooks.log('A Printer Jam Golem lurches into existence. Every enemy feels a deep need to hit it.', 'info');
+      // taunt: anyone who can hit the golem from where they stand turns to face it right away
+      for (const e of this.state.enemies()) {
+        for (let f = 0 as Dir; f < 4; f = (f + 1) as Dir) {
+          if (this.telegraphFor(e, e.pos, f).some(t => veq(t, g.pos))) {
+            if (e.facing !== f) { e.facing = f; await this.view.face(e); }
+            break;
+          }
+        }
+      }
+    }
     if (d.id === 'soup' || d.id === 'firehose') {
       for (const p of plan.area) this.setTileHazard(p, 'water', -1);
       this.fx.burst(tileToWorld(plan.primary, 0.3), [0x5ab4ff, 0xd9a35a], { count: 16, speed: 2 });
@@ -542,16 +737,27 @@ export class Rules {
       if (damaging || pr.kind === 'vase') await this.hitProp(pr, spell.damage, spell.name);
     }
 
-    if (d.id === 'armchair') {
+    // planted after the area's props are hit, so the new ficus does not set itself off
+    if (d.id === 'plant' && this.state.isFree(plan.primary)) {
+      const plant = this.state.makeProp('plant', plan.primary);
+      plant.spell = spell;
+      this.sync();
+      await this.view.dropProp(plant, 2);
+      this.hooks.log('You place a dead ficus. Nobody has watered it in years. It is not happy.', 'info');
+      if (this.state.enemies().some(e => chebyshev(e.pos, plant.pos) <= 1)) await this.triggerPlant(plant);
+    }
+    if (d.id === 'armchair' || d.id === 'lostfound') {
       let spot: Vec | null = this.state.isFree(plan.primary) ? plan.primary : null;
       if (!spot) {
         for (const o of DIRS) { const n = vadd(plan.primary, o); if (this.state.isFree(n)) { spot = n; break; } }
       }
       if (spot) {
-        const chair = this.state.makeProp('armchair', spot);
+        const prop = this.state.makeProp(d.id === 'armchair' ? 'armchair' : 'bin', spot);
         this.sync();
-        await this.view.dropProp(chair, 0.6);
-        this.hooks.log('The armchair settles in. It is now your cover. It is also quite comfy.', 'info');
+        await this.view.dropProp(prop, 0.6);
+        this.hooks.log(d.id === 'armchair'
+          ? 'The armchair settles in. It is now your cover. It is also quite comfy.'
+          : 'The Lost-and-Found Bin lands with a thud. It is now cover. It smells of old scarves.', 'info');
       }
     }
   }
@@ -574,6 +780,29 @@ export class Rules {
       case 'rust': s.rust += 1; say('🟫 rusty'); break;
       case 'hiccups': s.interrupted = Math.max(s.interrupted, 1); say('🫢 hic!'); break;
       case 'glitter': s.blind = 1; say('✨ sparkly!'); break;
+      case 'selfdoubt': s.weak = Math.max(s.weak, 2); say('😔 who am I kidding'); break;
+      case 'burrito': s.frozen = Math.max(s.frozen, 2); say('🧊 brr'); break;
+      case 'overtime': s.slow = Math.max(s.slow, 3); say('😩 unpaid hours'); break;
+      case 'positivity':
+        u.hp = Math.min(u.maxHp, u.hp + 1);
+        s.pacified = Math.max(s.pacified, 2);
+        say('🌈 good vibes only!');
+        break;
+      case 'imposter':
+        if (u.team === 'enemy') { s.charmed = Math.max(s.charmed, 1); say('🎭 "it\'s not me!"'); }
+        break;
+      case 'committee': s.marked = Math.max(s.marked, 3); say('🗳️ under review'); break;
+      case 'warning':
+        if (s.doom <= 0) { s.doom = 3; say('📄 FINAL WARNING'); }
+        break;
+      case 'cc': {
+        s.vulnerable = Math.max(s.vulnerable, 2);
+        say("📧 cc'd");
+        const others = this.state.enemies().filter(e => e !== u)
+          .sort((a, c) => manhattan(a.pos, u.pos) - manhattan(c.pos, u.pos)).slice(0, 2);
+        for (const e of others) { e.status.vulnerable = Math.max(e.status.vulnerable, 2); this.fx.floatText(this.uw(e, 1.55), "📧 cc'd", 'status'); }
+        break;
+      }
       default: break;
     }
   }
@@ -752,6 +981,95 @@ export class Rules {
           await this.breakVase(v, 'sonic shatter');
           for (const o of DIRS) { const u = this.state.unitAt(vadd(v.pos, o)); if (u) await this.damage(u, 1, 'Flying shards'); }
         }
+        break;
+      }
+      // ---- Office Politics
+      case 'calendar':
+        this.pendingCooldownPenalty += 1;
+        say('📅 double-booked');
+        this.hooks.log('You have been double-booked. Your next spell takes an extra turn to recharge.', 'bad');
+        break;
+      case 'budget':
+        this.hooks.log('Budget cuts: the spell ran at half power, but it is approved again for next turn.', 'info');
+        break;
+      case 'desk': {
+        const behind = vadd(caster.pos, DIRS[opposite(plan.dir)]);
+        const spot = this.state.isFree(behind) ? behind : this.freeNeighbor(caster.pos, false);
+        if (spot) {
+          const desk = this.state.makeProp('desk', spot);
+          this.sync();
+          await this.view.dropProp(desk, 2);
+          this.hooks.log('A desk appears. You now have a fort. It blocks bolts and judgement.', 'good');
+        }
+        break;
+      }
+      case 'teambuilding': {
+        const centre = plan.primary;
+        say('🤝 trust exercise!');
+        const team = this.state.enemies().sort((a, c) => manhattan(a.pos, centre) - manhattan(c.pos, centre));
+        for (const e of team) {
+          if (!e.alive || manhattan(e.pos, centre) <= 1) continue;
+          await this.push(e, dirTo(e.pos, centre), 1, { mode: 'slide', noBumpDamage: true });
+        }
+        this.hooks.log('Mandatory team building: every enemy shuffles 1 tile toward the target.', 'info');
+        break;
+      }
+      case 'coffee':
+        this.grantExtraMove = true;
+        say('☕ coffee run!');
+        this.hooks.log('You are sent on a coffee run. You may move again this turn.', 'good');
+        break;
+
+      // ---- Corporate Necromancy
+      case 'blame': {
+        const scapegoat = this.state.enemies().sort((a, c) => manhattan(a.pos, caster.pos) - manhattan(c.pos, caster.pos))[0];
+        if (scapegoat) {
+          this.fx.floatText(this.uw(scapegoat, 1.6), '👉 "it was them"', 'shout');
+          this.hooks.log(`You blame ${scapegoat.name}. Their coworkers take it out on them.`, 'good');
+          await this.damage(scapegoat, 1, 'Its own coworkers');
+        } else {
+          this.hooks.log('You try to blame someone, but there is nobody left to blame. Awkward.', 'info');
+        }
+        break;
+      }
+      case 'intern': {
+        const nearest = this.state.enemies().sort((a, c) => manhattan(a.pos, caster.pos) - manhattan(c.pos, caster.pos))[0];
+        const pref = nearest ? vadd(caster.pos, DIRS[dirTo(caster.pos, nearest.pos)]) : null;
+        const spot = pref && this.state.isFree(pref) ? pref : this.freeNeighbor(caster.pos, false);
+        if (spot) {
+          const intern = this.state.makeUnit('intern', spot, nearest ? dirTo(spot, nearest.pos) : 0);
+          this.sync();
+          const m = this.view.unitMeshes.get(intern.id);
+          if (m) { m.position.y = 3; await this.sm.tween(260, t => { m.position.y = 3 * (1 - t); }); m.position.y = 0; }
+          this.fx.floatText(this.uw(intern, 1.3), '"is this paid?"', 'shout');
+          this.hooks.log('An unpaid intern appears beside you. They will take one hit, then quit.', 'good');
+        }
+        break;
+      }
+      case 'exit':
+        if (caster.maxHp > 1) {
+          caster.maxHp -= 1;
+          caster.hp = Math.min(caster.hp, caster.maxHp);
+          this.exitInterviewLoss += 1;
+        }
+        say('🗂️ exit interview');
+        this.hooks.log('HR holds your exit interview early. You lose 1 max HP until the next floor.', 'bad');
+        this.view.refreshTags(this.state);
+        break;
+      case 'incident': {
+        say('⚠️ DAYS SINCE LAST ACCIDENT: 0');
+        this.sm.addShake(0.25);
+        this.hooks.log('The "days since last accident" sign resets to 0. Everyone takes 1 damage, you included.', 'bad');
+        for (const u of this.state.livingUnits()) await this.damage(u, 1, 'A workplace incident', { silent: true });
+        break;
+      }
+      case 'sludge': {
+        const free = this.state.allTiles().filter(t => !this.state.hazardAt(t) && !this.state.propAt(t) && !veq(t, caster.pos));
+        this.rng.shuffle(free);
+        for (const t of free.slice(0, 3)) this.state.setHazard(t, 'sludge', 4);
+        this.fx.burst(this.uw(caster, 0.5), [0x9cff3a, 0x5a8a1a], { count: 14, speed: 2 });
+        this.hooks.log('Toxic sludge spills on 3 random tiles. HR has been notified. HR does not care.', 'bad');
+        this.sync();
         break;
       }
     }
