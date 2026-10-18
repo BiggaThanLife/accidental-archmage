@@ -74,6 +74,13 @@ behind or an intern who takes a hit. Their components carry a `branch` field and
 **Onboarding.** The first time you enter the tower, an HR memo explains that you are the janitor and have not been
 trained; it can be re-read from How to play. The janitor's nervous thoughts appear in the log on the first floor.
 
+**Familiars.** The Academy course *Summoning (Correspondence Course)* (15 residue, Component Mastery) adds a Summon
+Familiar card to every run. It summons a random creature (Owl, Pocket Imp, Animated Mop, Baby Dragon, Mimic,
+Will-o'-the-Wisp, Gargoyle, Slime) with a random flaw (Blind, Forgetful, Disfigured, Cowardly, Narcoleptic, Overly
+Affectionate, Pyromaniac, Kleptomaniac, Unionised, Pacifist, Gassy, Overconfident, Magic-Allergic, Existentially
+Troubled): 112 combinations. The familiar acts on its own just before the enemies and follows you between floors;
+one at a time. Flaws are allowed to hurt, and kill, you. Data and behaviour live in `src/game/Companions.ts`.
+
 **Telegraphs.** Enemies store an attack *pattern* and *facing*, not fixed tiles. Red tiles are recomputed whenever
 anything moves, so shoving, sliding or turning an enemy (Gossip Wave turns them 180°) redirects its attack, often into
 its colleagues. Guards strike the tile in front, Crossbow Clerks fire a 4-tile bolt that stops at the first blocker,

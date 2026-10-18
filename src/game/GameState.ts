@@ -21,6 +21,7 @@ export const UNIT_TEMPLATES: Record<UnitKind, UnitTemplate> = {
   goose: { name: 'Confused Goose', hp: 3, atk: 1, def: 0, move: 2, attack: 'peck', team: 'neutral' },
   golem: { name: 'Printer Jam Golem', hp: 4, atk: 0, def: 0, move: 0, attack: 'melee', team: 'neutral' },
   intern: { name: 'Unpaid Intern', hp: 1, atk: 0, def: 0, move: 0, attack: 'melee', team: 'neutral' },
+  familiar: { name: 'Familiar', hp: 4, atk: 0, def: 0, move: 2, attack: 'melee', team: 'player' },
 };
 
 export class GameState {

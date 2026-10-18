@@ -20,7 +20,10 @@ export interface Hazard {
   turns: number;
 }
 
-export type UnitKind = 'wizard' | 'guard' | 'clerk' | 'brute' | 'goose' | 'golem' | 'intern';
+export type UnitKind = 'wizard' | 'guard' | 'clerk' | 'brute' | 'goose' | 'golem' | 'intern' | 'familiar';
+
+/** A summoned familiar's creature, flaw and bookkeeping (see game/Companions.ts). */
+export interface FamiliarInfo { creature: string; flaw: string; turns: number; asleep: number; breath: number }
 export type Team = 'player' | 'enemy' | 'neutral';
 export type AttackPattern = 'melee' | 'line' | 'sweep' | 'peck';
 
@@ -67,6 +70,7 @@ export interface Unit {
   attack: AttackPattern;
   status: Status;
   alive: boolean;
+  familiar?: FamiliarInfo;
 }
 
 export type PropKind = 'obstacle' | 'pillar' | 'crate' | 'vase' | 'armchair' | 'cart' | 'confetti' | 'plant' | 'bin' | 'desk';

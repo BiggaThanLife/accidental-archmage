@@ -151,6 +151,107 @@ function makeIntern(): THREE.Group {
   return shadowed(g);
 }
 
+/** Summoned familiars: small, magical, and visibly not quite right. */
+function makeFamiliar(creature: string): THREE.Group {
+  const g = new THREE.Group();
+  switch (creature) {
+    case 'owl': {
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), std(0x8b5e3c)); body.scale.set(1, 1.15, 0.9); body.position.y = 0.45;
+      const belly = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), std(0xe8d3b0)); belly.position.set(0, 0.42, 0.11);
+      for (const x of [-0.07, 0.07]) {
+        const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.02, 12), std(0xf2e2c0)); ring.rotation.x = Math.PI / 2; ring.position.set(x, 0.56, 0.16); g.add(ring);
+        const ear = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.1, 5), std(0x6b4423)); ear.position.set(x * 1.6, 0.73, 0); g.add(ear);
+      }
+      for (const x of [-0.22, 0.22]) {
+        const wing = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.24, 0.18), std(0x6b4423)); wing.position.set(x, 0.45, 0); wing.rotation.z = x * 1.2; g.add(wing);
+      }
+      eyes(g, 0.56, 0.17, 0.07, 0.04);
+      g.add(body, belly);
+      g.userData.floaty = true;
+      break;
+    }
+    case 'imp': {
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 10), std(0xd9382e)); body.position.y = 0.3;
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 10), std(0xe8483a)); head.position.y = 0.58;
+      for (const x of [-0.08, 0.08]) {
+        const horn = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.13, 6), std(0x2a1d12)); horn.position.set(x, 0.74, 0); horn.rotation.z = -x * 4; g.add(horn);
+      }
+      const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.35, 5), std(0xd9382e)); tail.position.set(0, 0.25, -0.22); tail.rotation.x = 1.0;
+      const flame = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffb347 })); flame.position.set(0.2, 0.42, 0.08);
+      eyes(g, 0.6, 0.12, 0.05, 0.03);
+      g.add(body, head, tail, flame);
+      break;
+    }
+    case 'mop': {
+      const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.9, 6), std(0xc9a96e)); stick.position.y = 0.6;
+      const head = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 0.25, 12, 1, true), std(0xd8d8d8, { side: THREE.DoubleSide })); head.position.y = 0.14;
+      for (let i = 0; i < 10; i++) {
+        const strand = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.22, 4), std(0xeeeeee));
+        strand.position.set(Math.cos(i * 0.63) * 0.2, 0.08, Math.sin(i * 0.63) * 0.2); g.add(strand);
+      }
+      const bucket = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.08, 10), std(0x3d7be0)); bucket.position.set(0, 0.32, 0.05);
+      eyes(g, 0.38, 0.12, 0.06, 0.035);
+      g.add(stick, head, bucket);
+      break;
+    }
+    case 'dragon': {
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), std(0x4caf50)); body.scale.set(1, 0.85, 1.25); body.position.y = 0.3;
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 10), std(0x5cc160)); head.position.set(0, 0.55, 0.2);
+      const snout = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.09, 0.12), std(0x5cc160)); snout.position.set(0, 0.5, 0.34);
+      for (const x of [-0.25, 0.25]) {
+        const wing = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.3, 3), std(0x2e7d32, { flatShading: true })); wing.position.set(x, 0.48, -0.05); wing.rotation.z = -x * 4; g.add(wing);
+      }
+      const tail = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.35, 6), std(0x4caf50)); tail.position.set(0, 0.22, -0.32); tail.rotation.x = -1.6;
+      eyes(g, 0.62, 0.3, 0.06, 0.035);
+      g.add(body, head, snout, tail);
+      break;
+    }
+    case 'mimic': {
+      const box = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.4, 0.55), std(0xa8743f)); box.position.y = 0.2;
+      const lid = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.12, 0.57), std(0x7b5129)); lid.position.set(0, 0.5, -0.08); lid.rotation.x = -0.45;
+      const tongue = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.03, 0.32), std(0xd94060)); tongue.position.set(0, 0.4, 0.2);
+      for (let i = 0; i < 5; i++) {
+        const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.08, 4), std(0xffffff)); tooth.position.set(-0.24 + i * 0.12, 0.38, 0.27); tooth.rotation.x = Math.PI; g.add(tooth);
+      }
+      eyes(g, 0.56, 0.12, 0.12, 0.045);
+      g.add(box, lid, tongue);
+      break;
+    }
+    case 'wisp': {
+      const core = new THREE.Mesh(new THREE.SphereGeometry(0.16, 14, 10), std(0x9ff3ff, { emissive: 0x44ccff, emissiveIntensity: 1.2, transparent: true, opacity: 0.85 }));
+      core.position.y = 0.6;
+      const halo = new THREE.Mesh(new THREE.SphereGeometry(0.26, 14, 10), new THREE.MeshBasicMaterial({ color: 0x9ff3ff, transparent: true, opacity: 0.25 }));
+      halo.position.y = 0.6;
+      const tail = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.3, 10), std(0x9ff3ff, { emissive: 0x44ccff, emissiveIntensity: 0.8, transparent: true, opacity: 0.6 }));
+      tail.position.y = 0.38; tail.rotation.x = Math.PI;
+      eyes(g, 0.63, 0.14, 0.05, 0.03);
+      g.add(core, halo, tail);
+      g.userData.floaty = true;
+      break;
+    }
+    case 'gargoyle': {
+      const base = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.15, 0.5), std(0x6d6189)); base.position.y = 0.08;
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.45, 0.36), std(0x8a8a94, { roughness: 0.95, flatShading: true })); body.position.y = 0.38;
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.24, 0.28), std(0x9a9aa4, { flatShading: true })); head.position.set(0, 0.72, 0.04);
+      for (const x of [-0.3, 0.3]) {
+        const wing = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.4, 3), std(0x6e6e78, { flatShading: true })); wing.position.set(x, 0.55, -0.1); wing.rotation.z = -x * 2.5; g.add(wing);
+        const horn = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.12, 4), std(0x6e6e78)); horn.position.set(x * 0.3, 0.9, 0.04); g.add(horn);
+      }
+      eyes(g, 0.74, 0.19, 0.07, 0.035);
+      g.add(base, body, head);
+      break;
+    }
+    default: { // slime
+      const blob = new THREE.Mesh(new THREE.SphereGeometry(0.28, 14, 10), std(0x7fff7f, { transparent: true, opacity: 0.75, roughness: 0.2 }));
+      blob.scale.set(1, 0.7, 1); blob.position.y = 0.2;
+      const inner = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), std(0x2e7d32)); inner.position.set(0.05, 0.18, -0.02);
+      eyes(g, 0.3, 0.22, 0.08, 0.04);
+      g.add(blob, inner);
+    }
+  }
+  return shadowed(g);
+}
+
 // ---------------------------------------------------------------- prop meshes
 export function makeArmchair(): THREE.Group {
   const g = new THREE.Group();
@@ -430,7 +531,8 @@ export class EntityView {
       if (!u.alive) continue;
       if (!this.unitMeshes.has(u.id)) {
         const m = u.kind === 'wizard' ? makeWizard() : u.kind === 'guard' ? makeGuard() : u.kind === 'clerk' ? makeClerk()
-          : u.kind === 'brute' ? makeBrute() : u.kind === 'golem' ? makeGolem() : u.kind === 'intern' ? makeIntern() : makeGoose();
+          : u.kind === 'brute' ? makeBrute() : u.kind === 'golem' ? makeGolem() : u.kind === 'intern' ? makeIntern()
+          : u.kind === 'familiar' ? makeFamiliar(u.familiar?.creature ?? 'slime') : makeGoose();
         m.userData.unitId = u.id;
         m.position.copy(tileToWorld(u.pos));
         m.rotation.y = facingToRot(u.facing);
@@ -595,10 +697,11 @@ export class EntityView {
       if (spark) spark.scale.setScalar(0.7 + Math.sin(time * 20) * 0.4);
     }
     if (this.ghost?.visible) this.ghost.position.y = 0.06 + Math.sin(time * 4) * 0.05;
-    // idle bob for units
+    // idle bob for units (and a gentle hover for flying familiars)
     for (const [id, m] of this.unitMeshes) {
       const child = m.children[0];
       if (child) child.scale.y = 1 + Math.sin(time * 3 + id) * 0.02;
+      if (m.userData.floaty) m.children.forEach(c => { if (c.userData.y0 === undefined) c.userData.y0 = c.position.y; c.position.y = c.userData.y0 + 0.08 + Math.sin(time * 3 + id) * 0.05; });
     }
   }
 }

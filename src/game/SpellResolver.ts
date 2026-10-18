@@ -15,6 +15,7 @@ import { Spell, SpellPlan, planSpell, getTargetTiles } from '../spells/SpellGene
 import { QUIPS } from '../spells/SpellComponents';
 import type { MetaBonuses } from '../meta/MetaProgression';
 import { newId } from './GameState';
+import { CREATURES, FLAWS } from './Companions';
 
 export interface RuleHooks {
   log(msg: string, cls?: string): void;
@@ -98,6 +99,9 @@ export class Rules {
       this.fx.burst(tileToWorld(u.pos, 0.5), [0xffffff, 0xd8d8d8], { count: 24, shape: 'flat', gravity: 2, up: 4 });
     } else if (u.kind === 'intern') {
       this.hooks.log('The intern quits. They were never paid anyway.', 'info');
+    } else if (u.kind === 'familiar') {
+      this.hooks.log(`${u.name} has been returned to the Academy, in several pieces.`, 'bad');
+      this.fx.burst(tileToWorld(u.pos, 0.5), [0xb28cff, 0xffffff], { count: 22, shape: 'flat', gravity: 2, up: 3 });
     }
     this.sync();
     if (u.status.marked > 0) {
@@ -475,6 +479,30 @@ export class Rules {
     return { endTurn, extraMove: !echo && this.grantExtraMove };
   }
 
+  addResidue(n: number, why: string) { this.hooks.residue(n, why); }
+
+  /** Summon Familiar: a random creature with a random flaw. Only one at a time. */
+  async summonFamiliar(at: Vec) {
+    for (const old of this.state.units.filter(u => u.kind === 'familiar' && u.alive)) {
+      old.alive = false; old.hp = 0;
+      this.hooks.log(`${old.name} is returned to sender to make room.`, 'info');
+    }
+    this.sync();
+    if (!this.state.isFree(at)) return;
+    const c = this.rng.pick(CREATURES), fl = this.rng.pick(FLAWS);
+    const u = this.state.makeUnit('familiar', at, 2);
+    u.name = `${fl.adj} ${c.name}`;
+    u.hp = u.maxHp = c.hp; u.def = c.def; u.move = c.move;
+    u.familiar = { creature: c.id, flaw: fl.id, turns: 0, asleep: 0, breath: 0 };
+    this.sync();
+    const m = this.view.unitMeshes.get(u.id);
+    if (m) { m.position.y = 3; await this.sm.tween(320, t => { m.position.y = 3 * (1 - t); }); m.position.y = 0; }
+    this.fx.ring(tileToWorld(at, 0.1), 0xb28cff, 2.2, 450);
+    this.fx.burst(tileToWorld(at, 0.6), [0xb28cff, 0xffffff, 0xffe14a], { count: 24, speed: 3, up: 3 });
+    this.fx.floatText(this.uw(u, 1.5), `✨ ${u.name}`, 'shout');
+    this.hooks.log(`A <b>${u.name}</b> answers the summons. ${c.blurb} ${fl.blurb}`, 'cast');
+  }
+
   /** The Calendar Conflict penalty is spent on the next spell you cast. */
   takeCooldownPenalty() { const p = this.pendingCooldownPenalty; this.pendingCooldownPenalty = 0; return p; }
 
@@ -702,6 +730,7 @@ export class Rules {
     }
 
     // --- 5. delivery tile effects + props in the area
+    if (d.id === 'familiar') await this.summonFamiliar(plan.primary);
     if (d.id === 'golem' && this.state.isFree(plan.primary)) {
       const g = this.state.makeUnit('golem', plan.primary, dirTo(plan.primary, caster.pos));
       this.sync();

@@ -4,7 +4,7 @@
 // grid displacement. Geometry (what can be targeted / what gets hit) lives here too.
 
 import {
-  DELIVERIES, PAYLOADS, SIDES, QUIPS, DeliveryDef, PayloadDef, SideDef,
+  DELIVERIES, PAYLOADS, SIDES, QUIPS, DeliveryDef, PayloadDef, SideDef, FAMILIAR_DELIVERY, NO_PAYLOAD, NO_SIDE,
 } from './SpellComponents';
 import {
   Dir, DIRS, Rng, Unit, Vec, dirTo, inBounds, manhattan, chebyshev, turnLeft, turnRight, vadd, vscale, veq,
@@ -153,6 +153,18 @@ export class SpellGenerator {
       cooldownLeft: 0,
       description,
       flavor: this.rng.pick(QUIPS.cast),
+    };
+  }
+
+  /** The Summoning course's card: a random familiar with a random flaw. */
+  familiarCard(): Spell {
+    return {
+      uid: spellUid++, delivery: FAMILIAR_DELIVERY, payload: NO_PAYLOAD, side: NO_SIDE,
+      name: 'Summon Familiar', formula: 'Correspondence Course + Mystery Creature + Fine Print',
+      range: FAMILIAR_DELIVERY.range, minRange: 1, pattern: FAMILIAR_DELIVERY.pattern, damage: 0, displacement: 'None',
+      primaryEffect: '', cooldown: 6, cooldownLeft: 0,
+      description: 'Summons a random magical creature with a random flaw. It fights for you during its own turn, more or less. One at a time: a new one replaces the old one. It follows you between floors.',
+      flavor: 'Results not guaranteed. Familiar not guaranteed either.',
     };
   }
 

@@ -10,6 +10,7 @@ import { EntityView } from '../core/EntityView';
 import { Effects } from '../core/Effects';
 import { SceneManager } from '../core/SceneManager';
 import { QUIPS } from '../spells/SpellComponents';
+import { Companions } from './Companions';
 
 export type Phase = 'player' | 'enemy' | 'environment' | 'busy' | 'won' | 'lost';
 
@@ -29,6 +30,7 @@ export class TurnManager {
   hasCast = false;
   /** Coffee Run granted before you moved: one more move after the first. */
   private bonusMoves = 0;
+  readonly companions: Companions;
 
   constructor(
     private state: GameState,
@@ -39,7 +41,9 @@ export class TurnManager {
     private sm: SceneManager,
     private rng: Rng,
     private hooks: TurnHooks,
-  ) {}
+  ) {
+    this.companions = new Companions(state, rules, this, view, fx, sm, rng, { log: (m, c) => hooks.log(m, c), refresh: () => hooks.refresh() });
+  }
 
   private setPhase(p: Phase) { this.phase = p; this.hooks.phaseChanged(p); }
 
@@ -124,6 +128,7 @@ export class TurnManager {
     this.hasCast = true;
     spell.cooldownLeft = spell.cooldown + this.rules.takeCooldownPenalty();
     const res = await this.rules.castSpell(spell, this.state.wizard, target);
+    await this.companions.afterPlayerCast();
     const ok = await this.afterPlayerAction();
     if (ok && res.extraMove && !res.endTurn) {
       if (this.hasMoved) this.hasMoved = false; else this.bonusMoves += 1;
@@ -165,6 +170,14 @@ export class TurnManager {
     this.board.clearHighlights();
     this.board.setArea([]);
     this.setPhase('enemy');
+    // your familiar goes first, for better or worse
+    for (const f of this.companions.living()) {
+      await this.companions.takeTurn(f);
+      this.refreshTelegraphs();
+      this.hooks.refresh();
+      if (!this.state.wizard.alive || this.state.enemies().length === 0) break;
+    }
+    if (this.checkEnd()) return;
     await this.enemyPhase();
     if (this.checkEnd()) return;
     this.setPhase('environment');

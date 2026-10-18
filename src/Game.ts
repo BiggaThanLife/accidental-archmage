@@ -12,6 +12,7 @@ import { DungeonGenerator } from './game/DungeonGenerator';
 import { Rng, Vec, key, veq, emptyStatus, dirTo } from './game/types';
 import { Spell, SpellGenerator, getTargetTiles, planSpell } from './spells/SpellGenerator';
 import { QUIPS } from './spells/SpellComponents';
+import { creatureDef, flawDef } from './game/Companions';
 import { MetaProgression } from './meta/MetaProgression';
 import { HUD } from './ui/HUD';
 
@@ -116,6 +117,7 @@ export class Game {
     };
     this.rules.exitInterviewLoss = 0;
     this.rules.pendingCooldownPenalty = 0;
+    if (b.summoning) this.run.hand.push(this.gen.familiarCard());
     this.nervous = this.rng.shuffle([...QUIPS.nervous]);
     this.hud.clearLog();
     this.hud.log('You accept the post of Archmage. Nobody checked your references.', 'info');
@@ -133,7 +135,18 @@ export class Game {
     wiz.maxHp += this.rules.exitInterviewLoss;
     this.rules.exitInterviewLoss = 0;
     this.view.clearAll();
+    const familiar = this.state.units.find(u => u.kind === 'familiar' && u.alive);
     const info = this.dungeon.generate(this.state, run.floor);
+    if (familiar) {
+      // the familiar follows you up the stairs and lands next to you
+      const near = this.state.allTiles().filter(t => this.state.isFree(t)).sort((a, c) =>
+        (Math.abs(a.x - wiz.pos.x) + Math.abs(a.y - wiz.pos.y)) - (Math.abs(c.x - wiz.pos.x) + Math.abs(c.y - wiz.pos.y)));
+      if (near.length) {
+        familiar.pos = { ...near[0] };
+        familiar.status = emptyStatus();
+        this.state.units.push(familiar);
+      }
+    }
     this.state.floor = run.floor;
     run.roomTitle = info.title;
     run.hand.forEach(s => (s.cooldownLeft = 0));
@@ -360,7 +373,8 @@ export class Game {
         ? (this.rules.telegraphFor(u).length ? { melee: 'Strikes the tile in front', line: 'Fires a bolt up to 4 tiles ahead', sweep: 'Sweeps 3 tiles in front', peck: '' }[u.attack] : 'Not attacking next turn')
         : u.kind === 'goose' ? 'Wanders. Pecks anyone adjacent.'
         : u.kind === 'golem' ? 'Every enemy must attack it until it breaks.'
-        : u.kind === 'intern' ? 'Takes one hit for you, then quits.' : 'That is you.';
+        : u.kind === 'intern' ? 'Takes one hit for you, then quits.'
+        : u.familiar ? `Your familiar. ${creatureDef(u.familiar.creature).blurb} ${flawDef(u.familiar.flaw).blurb}` : 'That is you.';
       const st = this.view.statusList(u);
       parts.push(`<b>${u.name}</b> <span class="mono">${u.hp}/${u.maxHp} HP · ATK ${u.atk}${u.def ? ` · DEF ${u.def}` : ''}</span><span>${intent}</span>${st.length ? `<span class="mono">${st.join(' · ')}</span>` : ''}`);
     }

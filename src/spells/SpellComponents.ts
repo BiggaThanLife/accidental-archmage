@@ -171,6 +171,11 @@ export const SIDES: SideDef[] = [
   { id: 'sludge', tier: 0, branch: 'necro', tag: 'Sludge', severity: 1, text: '...and spills toxic sludge on 3 random tiles. HR has been notified.' },
 ];
 
+/** The Summon Familiar card (Academy: Summoning). Not part of the random pools. */
+export const FAMILIAR_DELIVERY: DeliveryDef = { id: 'familiar', name: 'Summon Familiar', noun: 'Familiar', shape: 'summon', range: 2, baseDamage: 0, displace: 'none', displaceDist: 0, tier: 99, pattern: 'summon, 2 tiles', blurb: 'Summons a random magical familiar with a random flaw.', color: 0xb28cff };
+export const NO_PAYLOAD: PayloadDef = { id: 'none', name: 'Mystery Creature', adj: '', tier: 99, damage: 0, blurb: '', color: 0xffffff };
+export const NO_SIDE: SideDef = { id: 'none', tier: 99, tag: 'Fine Print', severity: 1, text: '...and something answers. It is not quite right.' };
+
 /** Flavour quips used in spell descriptions and the combat log. */
 export const QUIPS = {
   cast: [

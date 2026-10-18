@@ -39,6 +39,7 @@ export const UPGRADES: UpgradeNode[] = [
   { id: 'kitchen', branch: 'mastery', name: 'Kitchen Arts', costs: [12], levels: ['Unlocks Soup Bowl, Firehose, Vacuum Cleaner, Fax Machine'] },
   { id: 'party', branch: 'mastery', name: 'Party Arts', costs: [20], levels: ['Unlocks Disco Ball, Candelabra, Applause, Accordion, Carpet'], requires: { id: 'kitchen', level: 1 } },
   { id: 'agri', branch: 'mastery', name: 'Agricultural Siegecraft', costs: [30], levels: ['Unlocks Catapult and Summoned Livestock'], requires: { id: 'party', level: 1 } },
+  { id: 'summoning', branch: 'mastery', name: 'Summoning (Correspondence Course)', costs: [15], levels: ['Start every run with a Summon Familiar card: a random magical creature with a random, unhelpful flaw'] },
 
   // Starting Budget — better starter pools
   { id: 'petty', branch: 'budget', name: 'Petty Cash', costs: [10], levels: ['Starter spells draw from tier-2 payloads and side effects'] },
@@ -66,6 +67,7 @@ export interface MetaBonuses {
   bonusHp: number;
   officePolitics: boolean;
   necromancy: boolean;
+  summoning: boolean;
 }
 
 interface SaveData {
@@ -149,6 +151,7 @@ export class MetaProgression {
       bonusHp: L('tenure') * 3,
       officePolitics: L('politics') > 0,
       necromancy: L('necro') > 0,
+      summoning: L('summoning') > 0,
     };
   }
 }
