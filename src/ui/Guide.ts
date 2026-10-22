@@ -58,7 +58,10 @@ export class Guide {
     this.toast.hidden = true;
     this.toast.setAttribute('role', 'status');
     this.toast.setAttribute('aria-live', 'polite');
-    stage.append(this.chip, this.toast);
+    // Chip lives inside the top bar's floor block; the toast joins the top stack so nothing overlaps.
+    const block = stage.querySelector('#floor-block');
+    if (block) block.append(this.chip); else stage.append(this.chip);
+    (stage.querySelector('#callouts') ?? stage).append(this.toast);
   }
 
   // ------------------------------------------------------------ run tracking
@@ -93,13 +96,11 @@ export class Guide {
     const dots = '●'.repeat(threat) + '○'.repeat(5 - threat);
     const gap = power < need;
     this.chip.hidden = false;
-    // Sit just under the top bar, whose height varies with the floor name's wrapping.
-    const tb = document.getElementById('topbar');
-    if (tb) this.chip.style.top = `${tb.offsetTop + tb.offsetHeight + 6}px`;
     this.chip.className = 'guide-chip' + (gap ? ' warn' : '');
-    this.chip.innerHTML = `<span class="g-dots" aria-hidden="true">${dots}</span><b>Threat: ${THREAT_NAMES[threat]}</b>`
-      + `<span class="g-sub">${gap ? 'Under-equipped: visit the Academy' : floor < 4 ? 'Winnable with what you have' : 'Gear is on par: play matters'}</span>`;
-    this.chip.title = `Floor ${floor} threat ${threat}/5. Academy upgrades owned: ${power} (about ${need} expected here).`;
+    this.chip.innerHTML = `<span class="g-dots" aria-hidden="true">${dots}</span><b>${THREAT_NAMES[threat]}</b>`
+      + (gap ? '<span class="g-sub">⚠ Under-equipped</span>' : '');
+    const note = gap ? 'Under-equipped: visit the Academy' : floor < 4 ? 'Winnable with what you have' : 'Gear is on par: play matters';
+    this.chip.title = `Threat ${THREAT_NAMES[threat]} (${threat}/5). ${note}. Academy upgrades owned: ${power} (about ${need} expected here).`;
   }
   hideChip() { this.chip.hidden = true; }
 

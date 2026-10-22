@@ -756,3 +756,83 @@ button:disabled { cursor: default; }
 .inspect .trait { display: flex; flex-direction: column; border-left: 3px solid var(--brass); padding: 2px 0 2px 7px; margin-top: 2px; background: rgba(233, 185, 73, .1); border-radius: 0 6px 6px 0; }
 .inspect .trait b { color: var(--brass); font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
 .inspect .trait span { font-size: 12px; color: var(--chalk); }
+
+/* =====================================================================
+   Overlap fix: one top stack, compact inspect box, fixed action row
+   ===================================================================== */
+.top-stack {
+  position: absolute; z-index: 3;
+  top: 10px;
+  left: max(12px, env(safe-area-inset-left, 0px));
+  right: max(12px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 6px;
+  pointer-events: none;
+}
+.top-stack #topbar { position: static; inset: auto; }
+.floor-block { flex: 1 1 0; gap: 1px; }
+.stat-row { flex: none; }
+.room-title {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.callouts {
+  position: static; transform: none; top: auto; left: auto;
+  width: 100%; align-self: center; max-width: 440px;
+}
+.armed { max-width: 100%; }
+.armed .mini { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.threat { width: auto; max-width: 100%; }
+.toast { max-width: 100%; }
+
+.guide-chip { position: static; max-width: 100%; margin-top: 2px; }
+.callout { top: 40%; }
+
+/* unit info box: compact, bottom-right, above the turn pill / confirm bar */
+.inspect { bottom: 66px; max-width: min(240px, 55%); }
+.inspect .trait span { overflow-wrap: anywhere; }
+
+/* panel: spells/details/log scroll in the body; the action row never overlaps them */
+#panel { overflow: hidden; }
+#panel > .panel-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; overscroll-behavior: contain; }
+.panel-body > * { flex-shrink: 0; }
+#panel > .actions { flex: 0 0 auto; }
+.actions { position: static; bottom: auto; padding-block: 0; background: none; }
+#cancel-btn { flex: 0 0 auto; }
+
+@media (max-width: 600px) {
+  .top-stack { top: 8px; gap: 5px; }
+  .room-title { font-size: clamp(14px, 4vw, 17px); line-height: 1.02; }
+  .eyebrow { font-size: 10px; }
+  .stat-row { gap: 5px; }
+  .hp { padding: 4px 7px 4px 6px; }
+  .hp-bar { width: clamp(64px, 20vw, 84px); height: 18px; }
+  .residue, .ghost { padding: 4px 8px; }
+  #speed-btn { min-width: 36px; }
+  .armed { padding: 4px 10px; font-size: 11.5px; }
+  .armed b { font-size: 13px; }
+  .armed .mini { font-size: 10px; }
+  .toast, .threat { font-size: 12px; padding: 5px 10px; }
+  .guide-chip { font-size: 10.5px; padding: 2px 7px; }
+
+  .inspect {
+    bottom: 64px; max-width: min(190px, 50%); padding: 5px 8px; font-size: 11px; gap: 2px;
+    background: color-mix(in srgb, var(--stone) 86%, transparent);
+  }
+  .inspect .mono { font-size: 10px; }
+  .inspect .trait span {
+    font-size: 10.5px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1; overflow: hidden;
+  }
+  .inspect .trait b { font-size: 10px; }
+
+  #panel { max-height: 50%; gap: 6px; padding-block: 8px; }
+  .details { padding: 6px 9px; }
+  .details h3 { font-size: 15px; }
+  .details .desc { font-size: 12.5px; }
+  .details .flavor { display: none; }
+  .details .side { font-size: 12px; }
+  .card { flex-basis: min(220px, 70vw); }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .callouts { top: auto; }
+  #panel { max-height: none; }
+}

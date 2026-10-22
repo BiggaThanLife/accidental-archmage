@@ -57,8 +57,9 @@ export class HUD {
     root.innerHTML = `
       <div id="stage">
         <div id="labels"></div>
+        <div id="top-stack" class="top-stack">
         <header id="topbar">
-          <div class="floor-block">
+          <div class="floor-block" id="floor-block">
             <span class="eyebrow">Floor <b id="floor-num">1</b></span>
             <span id="room-title" class="room-title">—</span>
           </div>
@@ -69,9 +70,10 @@ export class HUD {
           </div>
         </header>
         <div id="callouts" class="callouts">
-          <div id="threat" class="threat" hidden></div>
           <div id="armed" class="armed" hidden></div>
+          <div id="threat" class="threat" hidden></div>
           <div id="toast" class="toast" hidden></div>
+        </div>
         </div>
         <div id="phase-pill" class="phase-pill">Your turn</div>
         <div id="hint" class="hint" hidden></div>
@@ -82,17 +84,19 @@ export class HUD {
         <div id="inspect" class="inspect" hidden></div>
       </div>
       <aside id="panel">
-        <div class="panel-head">
-          <span class="eyebrow">Spellbook</span>
-          <span id="action-state" class="action-state"></span>
+        <div class="panel-body">
+          <div class="panel-head">
+            <span class="eyebrow">Spellbook</span>
+            <span id="action-state" class="action-state"></span>
+          </div>
+          <div id="spells" class="spells"></div>
+          <div id="details" class="details"></div>
+          <ol id="log" class="log" aria-live="polite"></ol>
         </div>
-        <div id="spells" class="spells"></div>
-        <div id="details" class="details"></div>
         <div class="actions">
           <button id="cancel-btn" class="ghost" hidden>Cancel spell</button>
           <button id="end-turn" class="end-turn">End Turn</button>
         </div>
-        <ol id="log" class="log" aria-live="polite"></ol>
       </aside>
       <div id="overlay" class="overlay" hidden></div>
     `;
@@ -426,5 +430,5 @@ export class HUD {
 
 /** Inspect-box snippet for a unit trait; Game.ts can append it: parts.push(traitHtml(TRAIT_INFO[u.trait])). */
 export function traitHtml(info: { name: string; text: string } | undefined | null): string {
-  return info ? `<span class="trait"><b>${esc(info.name)}</b><span>${esc(info.text)}</span></span>` : '';
+  return info ? `<span class="trait" title="${esc(info.name + ': ' + info.text)}"><b>${esc(info.name)}</b><span>${esc(info.text)}</span></span>` : '';
 }

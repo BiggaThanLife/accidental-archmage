@@ -233,6 +233,7 @@ export class Game {
     if (p !== 'player') {
       this.pending = null;
       this.hud.confirm(null);
+      this.hud.inspect(null);
       this.board.clearHighlights();
       this.board.setArea([]);
       this.hud.hint(null);
@@ -341,7 +342,7 @@ export class Game {
       this.inspectTile(t);
       this.updateHighlights();
     });
-    canvas.addEventListener('pointerleave', () => { this.hovered = null; this.board.setHover(null); this.updateHighlights(); });
+    canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') this.hud.inspect(null); this.hovered = null; this.board.setHover(null); this.updateHighlights(); });
     canvas.addEventListener('pointerdown', e => { downAt = { x: e.clientX, y: e.clientY, t: performance.now() }; });
     canvas.addEventListener('pointerup', e => {
       if (!downAt) return;
@@ -505,6 +506,7 @@ export class Game {
     this.pending = null;
     this.hud.confirm(null);
     this.hud.hint(null);
+    this.hud.inspect(null);
     this.board.setArea([]);
     this.board.clearHighlights();
     this.view.setGhost(null);
@@ -522,6 +524,7 @@ export class Game {
   private async endTurn() {
     if (!this.run || this.turns.phase !== 'player') return;
     this.selected = -1; this.pending = null;
+    this.hud.inspect(null);
     this.hud.hint(null);
     this.hud.confirm(null);
     this.guide.noteEndTurn(this.turns.hasMoved, this.turns.hasCast);
