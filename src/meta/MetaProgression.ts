@@ -25,31 +25,31 @@ export const BRANCHES: Branch[] = [
 
 export const UPGRADES: UpgradeNode[] = [
   // Payload Synergy — longer / stronger elements
-  { id: 'grease', branch: 'synergy', name: 'Lingering Grease', costs: [8, 16], levels: ['Grease lasts +3 turns', 'Grease lasts +6 turns and spreads 1 tile further'] },
-  { id: 'cringe', branch: 'synergy', name: 'Deep Cringe', costs: [10, 20], levels: ['Embarrassment stuns +1 turn', 'Embarrassment stuns +2 turns'] },
-  { id: 'sorry', branch: 'synergy', name: 'Sincere Apologies', costs: [8, 16], levels: ['Apology pacifies +1 turn', 'Apology pacifies +2 turns'] },
-  { id: 'cabbage', branch: 'synergy', name: 'Cabbage Patch', costs: [10, 22], levels: ['Cabbage blasts deal +1 damage', 'Cabbage blasts deal +2 damage'] },
+  { id: 'grease', branch: 'synergy', name: 'Lingering Grease', costs: [8, 14], levels: ['Grease lasts +3 turns', 'Grease lasts +6 turns and spreads 1 tile further'] },
+  { id: 'cringe', branch: 'synergy', name: 'Deep Cringe', costs: [10, 18], levels: ['Embarrassment stuns +1 turn', 'Embarrassment stuns +2 turns'] },
+  { id: 'sorry', branch: 'synergy', name: 'Sincere Apologies', costs: [8, 14], levels: ['Apology pacifies +1 turn', 'Apology pacifies +2 turns'] },
+  { id: 'cabbage', branch: 'synergy', name: 'Cabbage Patch', costs: [10, 18], levels: ['Cabbage blasts deal +1 damage', 'Cabbage blasts deal +2 damage'] },
 
   // Casting Elasticity — tame the recoil, then weaponise it
-  { id: 'robes', branch: 'elasticity', name: 'Rubber Robes', costs: [6, 14], levels: ['Self-knockback reduced by 1', 'Self-knockback removed entirely'] },
-  { id: 'rebate', branch: 'elasticity', name: 'Kinetic Rebate', costs: [16, 28], levels: ['Recoil spells deal +1 damage', 'Recoil spells deal +2 damage'], requires: { id: 'robes', level: 2 } },
-  { id: 'hat', branch: 'elasticity', name: 'Padded Hat', costs: [10], levels: ['Take no bump damage when slammed into things'] },
+  { id: 'robes', branch: 'elasticity', name: 'Rubber Robes', costs: [6, 12], levels: ['Self-knockback reduced by 1', 'Self-knockback removed entirely'] },
+  { id: 'rebate', branch: 'elasticity', name: 'Kinetic Rebate', costs: [14, 22], levels: ['Recoil spells deal +1 damage', 'Recoil spells deal +2 damage'], requires: { id: 'robes', level: 2 } },
+  { id: 'hat', branch: 'elasticity', name: 'Padded Hat', costs: [8], levels: ['Take no bump damage when slammed into things'] },
 
   // Component Mastery — unlock delivery methods
-  { id: 'kitchen', branch: 'mastery', name: 'Kitchen Arts', costs: [12], levels: ['Unlocks Soup Bowl, Firehose, Vacuum Cleaner, Fax Machine'] },
-  { id: 'party', branch: 'mastery', name: 'Party Arts', costs: [20], levels: ['Unlocks Disco Ball, Candelabra, Applause, Accordion, Carpet'], requires: { id: 'kitchen', level: 1 } },
-  { id: 'agri', branch: 'mastery', name: 'Agricultural Siegecraft', costs: [30], levels: ['Unlocks Catapult and Summoned Livestock'], requires: { id: 'party', level: 1 } },
-  { id: 'summoning', branch: 'mastery', name: 'Summoning (Correspondence Course)', costs: [15], levels: ['Start every run with a Summon Familiar card: a random magical creature with a random, unhelpful flaw'] },
+  { id: 'kitchen', branch: 'mastery', name: 'Kitchen Arts', costs: [10], levels: ['Unlocks Soup Bowl, Firehose, Vacuum Cleaner, Fax Machine'] },
+  { id: 'party', branch: 'mastery', name: 'Party Arts', costs: [16], levels: ['Unlocks Disco Ball, Candelabra, Applause, Accordion, Carpet'], requires: { id: 'kitchen', level: 1 } },
+  { id: 'agri', branch: 'mastery', name: 'Agricultural Siegecraft', costs: [24], levels: ['Unlocks Catapult and Summoned Livestock'], requires: { id: 'party', level: 1 } },
+  { id: 'summoning', branch: 'mastery', name: 'Summoning (Correspondence Course)', costs: [14], levels: ['Start every run with a Summon Familiar card: a random magical creature with a random, unhelpful flaw'] },
 
   // Starting Budget — better starter pools
-  { id: 'petty', branch: 'budget', name: 'Petty Cash', costs: [10], levels: ['Starter spells draw from tier-2 payloads and side effects'] },
-  { id: 'grant', branch: 'budget', name: 'Embezzled Grant', costs: [24], levels: ['Starter spells draw from the full tier-3 pools'], requires: { id: 'petty', level: 1 } },
-  { id: 'pocket', branch: 'budget', name: 'Extra Pocket', costs: [14], levels: ['Start each run with a 4th spell'] },
-  { id: 'tenure', branch: 'budget', name: 'Tenure', costs: [8, 16], levels: ['+3 max HP', '+6 max HP'] },
+  { id: 'petty', branch: 'budget', name: 'Petty Cash', costs: [8], levels: ['Starter spells draw from tier-2 payloads and side effects'] },
+  { id: 'grant', branch: 'budget', name: 'Embezzled Grant', costs: [18], levels: ['Starter spells draw from the full tier-3 pools'], requires: { id: 'petty', level: 1 } },
+  { id: 'pocket', branch: 'budget', name: 'Extra Pocket', costs: [12], levels: ['Start each run with a 4th spell'] },
+  { id: 'tenure', branch: 'budget', name: 'Tenure', costs: [6, 12, 18], levels: ['+3 max HP', '+6 max HP', '+9 max HP'] },
 
   // Office Politics / Corporate Necromancy: each unlocks 5 deliveries, 5 payloads and 5 side effects
   { id: 'politics', branch: 'politics', name: 'Office Politics', costs: [10], levels: ['Unlocks Reply-All, Stapler, Swivel Chair, Sticky Note, Lost-and-Found; Self-Doubt, Frozen Burrito, Overtime, Toxic Positivity, Cc\'d; and 5 petty side effects'] },
-  { id: 'necro', branch: 'necro', name: 'Corporate Necromancy', costs: [20], levels: ['Unlocks Office Plant, Shredder, Printer Golem, Performance Review, Fire Drill; Imposter Syndrome, Restructuring, Death by Committee, Fridge Mould, Final Warning; and 5 dark side effects'], requires: { id: 'politics', level: 1 } },
+  { id: 'necro', branch: 'necro', name: 'Corporate Necromancy', costs: [16], levels: ['Unlocks Office Plant, Shredder, Printer Golem, Performance Review, Fire Drill; Imposter Syndrome, Restructuring, Death by Committee, Fridge Mould, Final Warning; and 5 dark side effects'], requires: { id: 'politics', level: 1 } },
 ];
 
 export interface MetaBonuses {
@@ -77,6 +77,8 @@ interface SaveData {
   bestFloor: number;
   lifetimeResidue: number;
   memoSeen?: boolean;
+  /** one-time guide tips already shown */
+  tipsSeen?: Record<string, boolean>;
 }
 
 const STORAGE_KEY = 'accidental-archmage-save-v1';
@@ -127,6 +129,26 @@ export class MetaProgression {
     this.data.runs += 1;
     this.data.bestFloor = Math.max(this.data.bestFloor, floor);
     this.save();
+  }
+
+  /** Total upgrade levels bought: a crude "how equipped are you" number. */
+  power(): number {
+    return UPGRADES.reduce((n, u) => n + this.level(u.id), 0);
+  }
+
+  /** Cheapest sensible next purchase (preferring a short list of survival upgrades), affordable or not. */
+  nextGoal(prefer: string[] = ['robes', 'tenure', 'hat', 'pocket', 'petty', 'kitchen']): { node: UpgradeNode; cost: number; affordable: boolean } | null {
+    const open = UPGRADES.filter(u => !this.isLocked(u) && this.nextCost(u) !== null);
+    if (!open.length) return null;
+    const pick = prefer.map(id => open.find(u => u.id === id)).find(Boolean)
+      ?? open.sort((a, b) => this.nextCost(a)! - this.nextCost(b)!)[0];
+    const cost = this.nextCost(pick)!;
+    return { node: pick, cost, affordable: this.data.residue >= cost };
+  }
+
+  /** Upgrades a player is expected to have bought to be comfortable on a given floor. */
+  static expectedPower(floor: number): number {
+    return floor < 4 ? 0 : floor < 6 ? 2 : floor < 8 ? 4 : 6 + Math.floor((floor - 8) / 2);
   }
 
   reset() {

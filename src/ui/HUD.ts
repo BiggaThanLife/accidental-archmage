@@ -30,12 +30,28 @@ export interface HudStats {
 
 const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 
+const SHAPE_ICON: Record<string, string> = {
+  cone: '💨', homing: '🐦', targeted: '🎯', overhead: '⬇️', arc: '📣', single: '🎟️', splash2x2: '🍲', flood: '🌊', pull: '🌀',
+  projectile: '📠', area3x3: '🪩', fireTarget: '🕯️', pierce: '👏', selfAoe: '🪗', path: '🧶', lob: '🏹', stampede: '🐄',
+  global: '📧', dash: '🪑', chain: '📝', trap: '🪴',
+};
+const hex = (n: number) => '#' + (n & 0xffffff).toString(16).padStart(6, '0');
+const chipsHtml = (s: Spell) =>
+  `<span class="chip" title="Range / pattern">◎ ${esc(s.pattern)}</span>` +
+  `<span class="chip ${s.damage > 0 ? 'dmg' : ''}" title="Damage">${s.damage > 0 ? '💥 ' + s.damage + ' dmg' : 'no dmg'}</span>` +
+  (s.displacement !== 'None' ? `<span class="chip move" title="Displacement">↔ ${esc(s.displacement)}</span>` : '');
+
 export class HUD {
   readonly stage: HTMLElement;
   readonly labels: HTMLElement;
   private el: Record<string, HTMLElement> = {};
   private logLines: string[] = [];
   selected = -1;
+  private lastHp: number | null = null;
+  private lastResidue: number | null = null;
+  private toastTimer = 0;
+  private lastPhase = '';
+  private prevCd: number[] = [];
 
   constructor(root: HTMLElement, private cb: HudCallbacks) {
     root.innerHTML = `
@@ -47,13 +63,17 @@ export class HUD {
             <span id="room-title" class="room-title">—</span>
           </div>
           <div class="stat-row">
-            <div class="hp" title="Hit points"><span class="eyebrow">HP</span><div class="hp-bar"><i id="hp-fill"></i></div><b id="hp-text">12/12</b></div>
+            <div class="hp" id="hp-box" title="Hit points"><span class="hp-heart">♥</span><div class="hp-bar"><i id="hp-fill"></i><b id="hp-text">12/12</b></div></div>
             <div class="residue" title="Unstable Mana Residue earned this run"><span class="eyebrow">Residue</span><b id="residue">0</b></div>
             <button id="speed-btn" class="ghost" title="Animation speed">1×</button>
           </div>
         </header>
+        <div id="callouts" class="callouts">
+          <div id="threat" class="threat" hidden></div>
+          <div id="armed" class="armed" hidden></div>
+          <div id="toast" class="toast" hidden></div>
+        </div>
         <div id="phase-pill" class="phase-pill">Your turn</div>
-        <div id="threat" class="threat" hidden></div>
         <div id="hint" class="hint" hidden></div>
         <div id="confirm" class="confirm" hidden>
           <button id="confirm-x" class="confirm-x" aria-label="Cancel">✕</button>
@@ -76,7 +96,7 @@ export class HUD {
       </aside>
       <div id="overlay" class="overlay" hidden></div>
     `;
-    const ids = ['floor-num', 'room-title', 'hp-fill', 'hp-text', 'residue', 'speed-btn', 'phase-pill', 'threat', 'hint', 'inspect',
+    const ids = ['floor-num', 'room-title', 'hp-fill', 'hp-text', 'hp-box', 'armed', 'toast', 'residue', 'speed-btn', 'phase-pill', 'threat', 'hint', 'inspect',
       'confirm', 'confirm-go', 'confirm-x', 'action-state', 'spells', 'details', 'cancel-btn', 'end-turn', 'log', 'overlay'];
     for (const id of ids) this.el[id] = root.querySelector('#' + id)! as HTMLElement;
     this.stage = root.querySelector('#stage')!;
@@ -93,6 +113,16 @@ export class HUD {
     this.el['hp-text'].textContent = `${Math.max(0, s.hp)}/${s.maxHp}`;
     (this.el['hp-fill'] as HTMLElement).style.width = `${Math.max(0, s.hp / s.maxHp) * 100}%`;
     this.el['hp-fill'].classList.toggle('low', s.hp <= s.maxHp * 0.34);
+    if (this.lastHp !== null && s.hp !== this.lastHp) {
+      const b = this.el['hp-box'];
+      const cls = s.hp < this.lastHp ? 'hit' : 'heal';
+      b.classList.remove('hit', 'heal'); void b.offsetWidth; b.classList.add(cls);
+    }
+    this.lastHp = s.hp;
+    if (this.lastResidue !== null && s.residue > this.lastResidue) {
+      const r = this.el['residue']; r.classList.remove('bump'); void r.offsetWidth; r.classList.add('bump');
+    }
+    this.lastResidue = s.residue;
     this.el['residue'].textContent = String(s.residue);
     this.el['speed-btn'].textContent = `${s.speed}×`;
 
@@ -101,14 +131,17 @@ export class HUD {
       player: `Turn ${s.turn} · Your move`, enemy: 'Enemies are acting…', environment: 'The tower settles…',
       busy: 'Spell in progress…', won: 'Floor cleared!', lost: 'Oh dear.',
     };
-    pill.textContent = labels[s.phase];
+    const tok = s.phase === 'player'
+      ? `<span class="tok ${s.hasMoved ? 'used' : ''}">👣 Move</span><span class="tok ${s.hasCast ? 'used' : ''}">✨ Cast</span>` : '';
+    pill.innerHTML = `<span class="pill-label">${labels[s.phase]}</span>${tok}`;
+    if (this.lastPhase !== s.phase) { pill.classList.remove('flip'); void pill.offsetWidth; pill.classList.add('flip'); this.lastPhase = s.phase; }
     pill.dataset.phase = s.phase;
 
     const playerTurn = s.phase === 'player';
     (this.el['end-turn'] as HTMLButtonElement).disabled = !playerTurn;
     this.el['end-turn'].classList.toggle('pulse', playerTurn && s.hasMoved && s.hasCast);
     this.el['action-state'].innerHTML =
-      `<span class="${s.hasMoved ? 'used' : ''}">Move</span><span class="${s.hasCast ? 'used' : ''}">Cast</span>`;
+      `<span class="${s.hasMoved ? 'used' : ''}">${s.hasMoved ? '✓' : '○'} Move</span><span class="${s.hasCast ? 'used' : ''}">${s.hasCast ? '✓' : '○'} Cast</span>`;
 
     const t = this.el['threat'];
     t.hidden = !(playerTurn && s.threats > 0);
@@ -119,18 +152,23 @@ export class HUD {
     const host = this.el['spells'];
     host.innerHTML = hand.map((s, i) => {
       const cd = s.cooldownLeft > 0;
+      const pct = cd ? Math.round((s.cooldownLeft / Math.max(1, s.cooldown)) * 100) : 0;
+      const tip = cd ? `Recharging: ${s.cooldownLeft} turn${s.cooldownLeft > 1 ? 's' : ''} left` : '';
       return `
-      <button class="card ${i === this.selected ? 'selected' : ''} ${cd ? 'cooling' : ''}" data-i="${i}" ${cd || !canCast ? 'aria-disabled="true"' : ''}>
-        <span class="card-top"><span class="key">${i + 1}</span><span class="name">${esc(s.name)}</span></span>
-        <span class="formula">${esc(s.delivery.name)} + ${esc(s.payload.name)} + ${esc(s.side.tag)}</span>
-        <span class="chips">
-          <span class="chip" title="Range / pattern">${esc(s.pattern)}</span>
-          <span class="chip ${s.damage > 0 ? 'dmg' : ''}" title="Damage">${s.damage > 0 ? s.damage + ' dmg' : 'no dmg'}</span>
-          ${s.displacement !== 'None' ? `<span class="chip" title="Displacement">${esc(s.displacement)}</span>` : ''}
-        </span>
-        <span class="cd-badge">${cd ? `Recharging · ${s.cooldownLeft}` : `Cooldown ${s.cooldown}`}</span>
+      <button class="card ${i === this.selected ? 'selected' : ''} ${cd ? 'cooling' : 'ready'}" data-i="${i}" style="--acc:${hex(s.payload.color)};--acc2:${hex(s.delivery.color)}" title="${esc(tip)}" ${cd || !canCast ? 'aria-disabled="true"' : ''} aria-pressed="${i === this.selected}">
+        <span class="card-top"><span class="sigil" aria-hidden="true">${SHAPE_ICON[s.delivery.shape] ?? '✨'}</span><span class="name">${esc(s.name)}</span><span class="key">${i + 1}</span></span>
+        <span class="formula"><b>${esc(s.delivery.noun)}</b> + <b>${esc(s.payload.name)}</b> + <b>${esc(s.side.tag)}</b></span>
+        <span class="chips">${chipsHtml(s)}</span>
+        <span class="cd-badge ${cd ? '' : 'rdy'}">${cd ? `⏳ ${s.cooldownLeft} turn${s.cooldownLeft > 1 ? 's' : ''} to recharge` : `Ready · recharge ${s.cooldown}`}</span>
+        ${cd ? `<span class="cd-bar"><i style="width:${pct}%"></i></span>` : ''}
       </button>`;
     }).join('');
+    const prev = this.prevCd;
+    host.querySelectorAll<HTMLElement>('.card').forEach((c, i) => {
+      if (prev.length === hand.length && prev[i] > 0 && hand[i].cooldownLeft === 0) c.classList.add('just-ready');
+    });
+    this.prevCd = hand.map(h => h.cooldownLeft);
+    host.querySelector('.card.selected')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     host.querySelectorAll<HTMLButtonElement>('.card').forEach(b => {
       b.addEventListener('click', () => this.cb.selectSpell(Number(b.dataset.i)));
     });
@@ -140,14 +178,24 @@ export class HUD {
 
   renderDetails(s: Spell | null) {
     const d = this.el['details'];
+    const armed = this.el['armed'];
     if (!s) {
-      d.innerHTML = `<p class="muted">Tap a spell, then a highlighted tile. Tap a <span class="k-move">green</span> tile to walk. <span class="k-tele">Red</span> tiles are where enemies will strike next.</p>`;
+      armed.hidden = true;
+      d.classList.remove('has-spell');
+      d.innerHTML = `<p class="muted">Pick a spell card, then a <span class="k-cast">blue</span> tile. Tap a <span class="k-move">green</span> tile to walk. <span class="k-tele">Red</span> tiles are where enemies strike next.</p>`;
       return;
     }
+    d.classList.add('has-spell');
+    d.style.setProperty('--acc', hex(s.payload.color));
     d.innerHTML = `
-      <h3>${esc(s.name)}</h3>
+      <h3>${SHAPE_ICON[s.delivery.shape] ?? '✨'} ${esc(s.name)}</h3>
+      <div class="chips">${chipsHtml(s)}</div>
       <p class="desc">${esc(s.description)}</p>
+      <p class="side"><b>Always happens:</b> ${esc(s.side.text)}</p>
       <p class="flavor">“${esc(s.flavor)}”</p>`;
+    armed.hidden = false;
+    armed.style.setProperty('--acc', hex(s.payload.color));
+    armed.innerHTML = `<b>${SHAPE_ICON[s.delivery.shape] ?? '✨'} ${esc(s.name)}</b><span class="mini">${s.damage > 0 ? s.damage + ' dmg · ' : ''}${esc(s.pattern)}</span>`;
   }
 
   private confirmCb: { go: () => void; cancel: () => void } | null = null;
@@ -185,9 +233,17 @@ export class HUD {
     this.logLines.unshift(`<li class="${cls}">${msg}</li>`);
     this.logLines = this.logLines.slice(0, 30);
     this.el['log'].innerHTML = this.logLines.join('');
+    if (cls === 'bad' || cls === 'good' || cls === 'boom') {
+      const t = this.el['toast'];
+      t.className = 'toast ' + cls;
+      t.innerHTML = msg;
+      t.hidden = false;
+      clearTimeout(this.toastTimer);
+      this.toastTimer = window.setTimeout(() => { t.hidden = true; }, 3200);
+    }
   }
 
-  clearLog() { this.logLines = []; this.el['log'].innerHTML = ''; }
+  clearLog() { this.logLines = []; this.el['log'].innerHTML = ''; this.el['toast'].hidden = true; }
 
   // ------------------------------------------------------------ overlays
   private showOverlay(html: string) {
@@ -254,19 +310,19 @@ export class HUD {
 
   showReward(floor: number, gained: number, options: Spell[], handFull: boolean, onPick: (i: number) => void, onNap: () => void) {
     const o = this.showOverlay(`
-      <span class="eyebrow">Floor ${floor} cleared · +${gained} residue</span>
-      <h2>The stairwell has a vending machine</h2>
+      <div class="banner-head"><span class="stamp">✔ Floor ${floor} cleared</span><span class="eyebrow">+${gained} residue banked</span>
+      <h2>The stairwell has a vending machine</h2></div>
       <p class="lede">Pick one new spell for your book${handFull ? ' (your book is full, so you will swap one out)' : ''}, or take a nap.</p>
       <div class="reward-grid">
         ${options.map((s, i) => `
-          <button class="reward" data-i="${i}">
-            <span class="name">${esc(s.name)}</span>
-            <span class="formula">${esc(s.formula)}</span>
-            <span class="chips"><span class="chip">${esc(s.pattern)}</span><span class="chip ${s.damage > 0 ? 'dmg' : ''}">${s.damage > 0 ? s.damage + ' dmg' : 'no dmg'}</span>${s.displacement !== 'None' ? `<span class="chip">${esc(s.displacement)}</span>` : ''}<span class="chip">CD ${s.cooldown}</span></span>
+          <button class="reward" data-i="${i}" style="--acc:${hex(s.payload.color)}">
+            <span class="reward-top"><span class="sigil" aria-hidden="true">${SHAPE_ICON[s.delivery.shape] ?? '✨'}</span><span class="name">${esc(s.name)}</span></span>
+            <span class="formula"><b>${esc(s.delivery.noun)}</b> + <b>${esc(s.payload.name)}</b> + <b>${esc(s.side.tag)}</b></span>
+            <span class="chips">${chipsHtml(s)}<span class="chip">⏳ ${s.cooldown}</span></span>
             <span class="desc">${esc(s.description)}</span>
           </button>`).join('')}
         <button class="reward nap" id="r-nap">
-          <span class="name">Take a nap on the landing</span>
+          <span class="reward-top"><span class="sigil">💤</span><span class="name">Take a nap on the landing</span></span>
           <span class="desc">Restore 5 HP. Nobody will notice. Probably.</span>
         </button>
       </div>`);
@@ -276,13 +332,13 @@ export class HUD {
 
   showReplace(newSpell: Spell, hand: Spell[], onReplace: (i: number) => void, onSkip: () => void) {
     const o = this.showOverlay(`
-      <span class="eyebrow">Spellbook full</span>
+      <span class="stamp">📖 Spellbook full</span>
       <h2>Tear out which page?</h2>
       <p class="lede">Making room for <b>${esc(newSpell.name)}</b>.</p>
       <div class="reward-grid">
         ${hand.map((s, i) => `
-          <button class="reward" data-i="${i}">
-            <span class="name">${esc(s.name)}</span>
+          <button class="reward" data-i="${i}" style="--acc:${hex(s.payload.color)}">
+            <span class="reward-top"><span class="sigil" aria-hidden="true">${SHAPE_ICON[s.delivery.shape] ?? '✨'}</span><span class="name">${esc(s.name)}</span></span>
             <span class="formula">${esc(s.formula)}</span>
           </button>`).join('')}
         <button class="reward nap" id="r-skip"><span class="name">Keep my book as it is</span></button>
@@ -294,7 +350,7 @@ export class HUD {
   showDeath(floor: number, earned: number, cause: string, meta: MetaProgression, onRestart: () => void, onTitle: () => void) {
     const o = this.showOverlay(`
       <div class="death-head">
-        <span class="eyebrow">Run over · Floor ${floor}</span>
+        <span class="stamp bad">☠ Run over · Floor ${floor}</span>
         <h2>You have been accidentally deceased</h2>
         <p class="lede">${esc(cause)} You keep <b>${earned}</b> Unstable Mana Residue, which is now soaking into the Academy carpet.</p>
       </div>
@@ -366,4 +422,9 @@ export class HUD {
     h.innerHTML = `<span class="eyebrow">Floor ${floor}</span><b>${esc(title)}</b><span>${esc(flavor)}</span>`;
     setTimeout(() => { h.classList.remove('banner'); h.hidden = true; }, 2600);
   }
+}
+
+/** Inspect-box snippet for a unit trait; Game.ts can append it: parts.push(traitHtml(TRAIT_INFO[u.trait])). */
+export function traitHtml(info: { name: string; text: string } | undefined | null): string {
+  return info ? `<span class="trait"><b>${esc(info.name)}</b><span>${esc(info.text)}</span></span>` : '';
 }

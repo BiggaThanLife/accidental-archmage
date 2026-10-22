@@ -1,6 +1,6 @@
 import {
   BOARD_SIZE, Hazard, HazardKind, Prop, PropKind, Unit, Vec, Zone, inBounds, key, emptyStatus,
-  UnitKind, Dir,
+  UnitKind, Dir, Trait,
 } from './types';
 
 let nextId = 1;
@@ -11,13 +11,21 @@ export const BLOCKING_PROPS: PropKind[] = ['obstacle', 'pillar', 'crate', 'vase'
 export interface UnitTemplate {
   name: string; hp: number; atk: number; def: number; move: number;
   attack: Unit['attack']; team: Unit['team'];
+  trait?: Trait;
 }
+
+/** Short HUD-friendly descriptions of enemy traits. */
+export const TRAIT_INFO: Record<Trait, { name: string; text: string }> = {
+  shielded: { name: 'Clipboard Shield', text: 'Spells hitting from the front lose 2 damage. Turn it around (Gossip), flank it, or use explosions, bumps and hazards.' },
+  huddle: { name: 'Buddy System', text: 'Takes 1 less direct spell damage while another enemy stands next to it. Split them up, or use blasts and hazards.' },
+  volatile: { name: 'Paper-Stuffed', text: 'Bursts into a 3x3 paper-cut blast (1 damage) when it dies. Kill it next to its friends. Or not next to you.' },
+};
 
 export const UNIT_TEMPLATES: Record<UnitKind, UnitTemplate> = {
   wizard: { name: 'You (the Archmage, allegedly)', hp: 12, atk: 0, def: 0, move: 3, attack: 'melee', team: 'player' },
-  guard: { name: 'Tower Guard', hp: 4, atk: 2, def: 0, move: 2, attack: 'melee', team: 'enemy' },
-  clerk: { name: 'Crossbow Clerk', hp: 3, atk: 2, def: 0, move: 2, attack: 'line', team: 'enemy' },
-  brute: { name: 'Bureaucrat Brute', hp: 6, atk: 3, def: 1, move: 1, attack: 'sweep', team: 'enemy' },
+  guard: { name: 'Tower Guard (Buddy System)', hp: 4, atk: 2, def: 0, move: 2, attack: 'melee', team: 'enemy', trait: 'huddle' },
+  clerk: { name: 'Crossbow Clerk (Paper-Stuffed)', hp: 3, atk: 2, def: 0, move: 2, attack: 'line', team: 'enemy', trait: 'volatile' },
+  brute: { name: 'Bureaucrat Brute (Clipboard Shield)', hp: 6, atk: 3, def: 0, move: 1, attack: 'sweep', team: 'enemy', trait: 'shielded' },
   goose: { name: 'Confused Goose', hp: 3, atk: 1, def: 0, move: 2, attack: 'peck', team: 'neutral' },
   golem: { name: 'Printer Jam Golem', hp: 4, atk: 0, def: 0, move: 0, attack: 'melee', team: 'neutral' },
   intern: { name: 'Unpaid Intern', hp: 1, atk: 0, def: 0, move: 0, attack: 'melee', team: 'neutral' },
@@ -44,7 +52,7 @@ export class GameState {
     const u: Unit = {
       id: newId(), kind, team: t.team, name: t.name, pos: { ...pos },
       hp: t.hp + hpBonus, maxHp: t.hp + hpBonus, atk: t.atk, def: t.def, move: t.move,
-      facing, attack: t.attack, status: emptyStatus(), alive: true,
+      facing, attack: t.attack, status: emptyStatus(), alive: true, trait: t.trait,
     };
     this.units.push(u);
     return u;

@@ -6,6 +6,8 @@ import { BOARD_SIZE, Rng, Vec, key, inBounds, UnitKind, Dir } from './types';
 export interface FloorInfo {
   title: string;
   flavor: string;
+  /** 1..5 */
+  threat: number;
 }
 
 const ROOM_NAMES = [
@@ -19,17 +21,35 @@ const ROOM_NAMES = [
   ['Records & Regrets', 'Your permanent record is kept here. It is long.'],
 ];
 
-/** Pick enemy composition based on floor depth. */
+/**
+ * Pick enemy composition based on floor depth.
+ * Ramp (v2): headcount 2,3,3,4,4,5,5,6 (was 3,3,4,4,5,5,6) so floor 1 is a real tutorial and the cap is hit a floor later.
+ * New enemy types are introduced one at a time (at most one clerk on floor 2, one brute on floor 3) instead of
+ * floor 2 being ~55% crossbow clerks.
+ */
 function enemyRoster(floor: number, rng: Rng): UnitKind[] {
-  const count = Math.min(6, 2 + Math.floor((floor + 1) / 2));
+  const count = Math.min(6, 2 + Math.floor(floor * 0.55));
+  const clerkP = floor < 2 ? 0 : Math.min(0.4, 0.2 + (floor - 2) * 0.05);
+  const bruteP = floor < 3 ? 0 : Math.min(0.35, 0.12 + (floor - 3) * 0.04);
   const roster: UnitKind[] = [];
+  let clerks = 0, brutes = 0;
   for (let i = 0; i < count; i++) {
     const r = rng.next();
-    if (floor >= 3 && r < 0.2 + floor * 0.02) roster.push('brute');
-    else if (floor >= 2 && r < 0.55) roster.push('clerk');
+    if (r < bruteP && (floor > 3 || brutes < 1)) { roster.push('brute'); brutes++; }
+    else if (r < bruteP + clerkP && (floor > 2 || clerks < 1)) { roster.push('clerk'); clerks++; }
     else roster.push('guard');
   }
   return roster;
+}
+
+/** Rough "how much trouble is this room" number: sum of enemy damage x toughness. */
+export function floorThreat(state: GameState): number {
+  return state.enemies().reduce((t, e) => t + e.atk * (e.hp + e.def), 0);
+}
+
+/** 1 (light) .. 5 (lethal). */
+export function threatLevel(threat: number): number {
+  return threat < 22 ? 1 : threat < 42 ? 2 : threat < 68 ? 3 : threat < 100 ? 4 : 5;
 }
 
 export class DungeonGenerator {
@@ -40,7 +60,7 @@ export class DungeonGenerator {
       if (this.tryGenerate(state, floor)) break;
     }
     const [title, flavor] = ROOM_NAMES[(floor - 1 + this.rng.int(0, 2)) % ROOM_NAMES.length];
-    return { title, flavor };
+    return { title, flavor, threat: threatLevel(floorThreat(state)) };
   }
 
   private tryGenerate(state: GameState, floor: number): boolean {
@@ -111,11 +131,13 @@ export class DungeonGenerator {
     }
 
     // Enemies in the top half
-    const hpBonus = Math.floor((floor - 1) / 3);
+    // +1 HP per 3 floors, phased in per enemy (1/3, 2/3, then all) instead of every enemy jumping at floors 4 and 7
+    const hpBase = Math.floor((floor - 1) / 3);
+    const hpFrac = ((floor - 1) % 3) / 3;
     for (const kind of enemyRoster(floor, rng)) {
       const p = randomTile(0, 3);
       if (!p) continue;
-      state.makeUnit(kind, p, 2 as Dir, hpBonus);
+      state.makeUnit(kind, p, 2 as Dir, hpBase + (rng.chance(hpFrac) ? 1 : 0));
     }
 
     // Validate: wizard can reach next to every enemy

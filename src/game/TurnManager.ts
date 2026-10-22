@@ -327,6 +327,19 @@ export class TurnManager {
       }
     }
     if (!st.wizard.alive) return;
+    // status combos: a burning wearer ignites grease underfoot; water puts them out
+    for (const u of st.livingUnits()) {
+      if (u.status.dot <= 0) continue;
+      const hz = st.hazardAt(u.pos)?.kind;
+      if (hz === 'water') {
+        u.status.dot = 0;
+        this.fx.floatText(tileToWorld(u.pos, 1.5), '💦 lukewarm latte', 'status');
+      } else if (hz === 'grease') {
+        this.hooks.log(`${u.kind === 'wizard' ? 'Your' : u.name + "'s"} scalding coffee meets the grease. Hot take.`, 'boom');
+        await this.rules.ignite(u.pos);
+      }
+    }
+    if (!st.wizard.alive) return;
     // burning feet (coffee), bees
     for (const u of st.livingUnits()) {
       if (u.status.dot > 0) {

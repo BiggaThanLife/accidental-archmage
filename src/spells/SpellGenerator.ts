@@ -92,7 +92,7 @@ export class SpellGenerator {
   compose(delivery: DeliveryDef, payload: PayloadDef, side: SideDef): Spell {
     const b = this.bonuses;
     let damage = delivery.baseDamage + payload.damage;
-    if (side.id === 'recoil') damage += b.recoilDamage;
+    if (side.id === 'recoil') damage += b.recoilDamage + (damage > 0 ? 1 : 0);
     if (side.id === 'budget') damage = Math.floor(damage / 2);
 
     // ----- displacement summary

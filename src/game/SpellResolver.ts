@@ -57,7 +57,7 @@ export class Rules {
   private uw(u: Unit, y = 1.0) { const p = this.view.unitWorld(u); p.y = y; return p; }
 
   // ================================================================ damage
-  async damage(u: Unit, amount: number, source: string, opts: { silent?: boolean } = {}) {
+  async damage(u: Unit, amount: number, source: string, opts: { silent?: boolean; from?: Vec } = {}) {
     if (!u.alive || amount <= 0) return;
     let dmg = amount;
     if (u.status.enraged > 0) dmg += 1;
@@ -71,6 +71,16 @@ export class Rules {
     }
     const def = u.status.enraged > 0 ? 0 : u.def;
     dmg = Math.max(0, dmg - def);
+    // Direct spell hits (opts.from) can be softened by enemy traits; blasts, bumps and hazards ignore them.
+    if (opts.from && u.team === 'enemy' && dmg > 0) {
+      if (u.trait === 'shielded' && u.status.stun <= 0 && u.status.frozen <= 0 && dirTo(u.pos, opts.from) === u.facing) {
+        dmg = Math.max(0, dmg - 2);
+        this.fx.floatText(this.uw(u, 1.7), '📋 CLIPBOARD!', 'info');
+      } else if (u.trait === 'huddle' && this.state.enemies().some(e => e !== u && chebyshev(e.pos, u.pos) <= 1)) {
+        dmg = Math.max(1, dmg - 1);
+        this.fx.floatText(this.uw(u, 1.7), '🤝 buddy system', 'info');
+      }
+    }
     if (dmg === 0) {
       this.fx.floatText(this.uw(u), 'BLOCKED', 'info');
       return;
@@ -83,6 +93,10 @@ export class Rules {
     this.view.refreshTags(this.state);
   }
 
+  /** Name of the spell currently resolving (null outside a cast); used to spot indirect, slapstick kills. */
+  private currentSpell: string | null = null;
+  private castKills = 0;
+
   async kill(u: Unit, source: string) {
     if (!u.alive) return;
     u.hp = 0;
@@ -91,6 +105,16 @@ export class Rules {
     if (u.team === 'enemy') {
       this.hooks.log(`${u.name} ${this.rng.pick(QUIPS.kill)} (${source})`, 'good');
       this.hooks.residue(2, `${u.name} defeated`);
+      // slapstick bonuses: kills the environment did for you, and multi-kills in one cast
+      let bonus = 0;
+      if (this.currentSpell !== null) this.castKills++;
+      if (this.currentSpell !== null && this.castKills >= 2) bonus += Math.min(this.castKills - 1, 3);
+      if (source !== this.currentSpell) bonus += 1;
+      if (bonus > 0) {
+        this.fx.floatText(this.uw(u, 2.0), `🎯 +${bonus} slapstick`, 'shout');
+        this.hooks.log(`Creative liability! ${bonus > 1 ? 'A chain reaction' : 'The environment'} did the paperwork for you (+${bonus} residue).`, 'boom');
+        this.hooks.residue(bonus, 'slapstick combo');
+      }
     } else if (u.kind === 'goose') {
       this.hooks.log('The goose departs in a cloud of feathers and spite.', 'info');
       this.fx.burst(tileToWorld(u.pos, 0.4), [0xffffff, 0xeeeeee], { count: 20, shape: 'flat', gravity: 2, up: 3 });
@@ -104,6 +128,13 @@ export class Rules {
       this.fx.burst(tileToWorld(u.pos, 0.5), [0xb28cff, 0xffffff], { count: 22, shape: 'flat', gravity: 2, up: 3 });
     }
     this.sync();
+    if (u.trait === 'volatile' && u.team === 'enemy') {
+      const w = tileToWorld(u.pos, 0.5);
+      this.fx.burst(w, [0xffffff, 0xf0e6c8, 0xdddddd], { count: 24, shape: 'flat', speed: 3.5, up: 3, gravity: 2 });
+      this.fx.floatText(w.clone().setY(1.6), 'PAPER CUTS!', 'shout');
+      this.hooks.log(`${u.name} bursts into a blizzard of unfiled paperwork. Everyone nearby gets paper cuts.`, 'boom');
+      await this.blast(u.pos, 1, 'Paper cuts', false);
+    }
     if (u.status.marked > 0) {
       u.status.marked = 0;
       const w = tileToWorld(u.pos, 0.5);
@@ -122,6 +153,7 @@ export class Rules {
     if (u.status.pinned > 0) { this.fx.floatText(this.uw(u, 1.4), '📎 stapled!', 'info'); return; }
     let d = dir;
     let blocked = false;
+    let travelled = 0;
     for (let i = 0; i < dist && u.alive; i++) {
       const next = vadd(u.pos, DIRS[d]);
       if (this.state.isBlocked(next, u)) {
@@ -132,11 +164,12 @@ export class Rules {
           if (this.state.isBlocked(back, u)) { blocked = true; break; }
           continue;
         }
-        await this.collide(u, next, d, opts.noBumpDamage);
+        await this.collide(u, next, d, opts.noBumpDamage, travelled);
         blocked = true;
         break;
       }
       u.pos = next;
+      travelled++;
       await this.view.moveUnit(u, next, opts.mode ?? 'knock');
       await this.onEnter(u);
     }
@@ -144,15 +177,18 @@ export class Rules {
     this.sync();
   }
 
-  private async collide(u: Unit, into: Vec, d: Dir, noDamage?: boolean) {
+  /** Bumps hurt both parties; a unit that built up speed (2+ tiles) hits for +1 momentum damage. */
+  private async collide(u: Unit, into: Vec, d: Dir, noDamage?: boolean, travelled = 0) {
+    const mom = travelled >= 2 ? 1 : 0;
+    if (mom && !noDamage && u.kind !== 'wizard') this.fx.floatText(this.uw(u, 1.8), 'MOMENTUM!', 'shout');
     await this.view.bump(u, DIRS[d]);
     this.fx.floatText(this.uw(u, 1.3), this.rng.pick(QUIPS.bump), 'bonk');
     this.sm.addShake(0.12);
     const wizardPadded = u.kind === 'wizard' && this.bonuses.paddedHat;
-    if (!noDamage && !wizardPadded) await this.damage(u, 1, 'A wall-related incident');
+    if (!noDamage && !wizardPadded) await this.damage(u, 1 + mom, 'A wall-related incident');
     if (!inBounds(into)) return;
     const other = this.state.unitAt(into);
-    if (other && !noDamage) await this.damage(other, 1, `${u.name} (thrown)`);
+    if (other && !noDamage) await this.damage(other, 1 + mom, `${u.name} (thrown)`);
     const prop = this.state.propAt(into);
     if (prop) await this.hitProp(prop, 1, `${u.name} slammed into it`);
   }
@@ -470,11 +506,13 @@ export class Rules {
     const selfCentred = spell.delivery.shape === 'selfAoe' || spell.delivery.shape === 'global';
     if (caster.facing !== plan.dir && !selfCentred) { caster.facing = plan.dir; await this.view.face(caster); }
 
+    if (!echo) { this.currentSpell = spell.name; this.castKills = 0; }
     await this.animateDelivery(spell, caster, plan);
     await this.resolveImpact(spell, caster, plan);
 
     let endTurn = false;
     if (!echo && caster.alive) endTurn = await this.sideEffect(spell, caster, plan);
+    if (!echo) this.currentSpell = null;
     this.sync();
     return { endTurn, extraMove: !echo && this.grantExtraMove };
   }
@@ -606,7 +644,13 @@ export class Rules {
       const dmg = pl.id === 'cabbage' ? d.baseDamage + (spell.side.id === 'recoil' ? b.recoilDamage : 0) : spell.damage;
       // marked before the hit, so a committee victim killed by this very spell still explodes
       if (pl.id === 'committee') u.status.marked = Math.max(u.status.marked, 3);
-      await this.damage(u, dmg, spell.name);
+      // Sitting Duck: setting a target up (rooted / stapled / pacified) makes the follow-up hurt more
+      let hitDmg = dmg;
+      if (hitDmg > 0 && u.team !== 'player' && (u.status.rooted > 0 || u.status.pinned > 0 || u.status.pacified > 0)) {
+        hitDmg += 1;
+        this.fx.floatText(this.uw(u, 1.9), '🦆 SITTING DUCK', 'bonk');
+      }
+      await this.damage(u, hitDmg, spell.name, { from: caster.pos });
       if (!u.alive) continue;
       this.applyStatus(spell, u);
       if (d.id === 'anvil') { u.status.rooted = Math.max(u.status.rooted, 1); await this.view.squash(u); }
@@ -616,12 +660,12 @@ export class Rules {
         this.fx.floatText(this.uw(u, 1.5), 'ka-CHUNK 📎', 'shout');
         await this.view.squash(u);
       }
-      if (d.electric && this.state.hazardAt(u.pos)?.kind === 'water') await this.shock(u.pos, 2, spell.name);
+      if (d.electric && this.state.hazardAt(u.pos)?.kind === 'water') await this.shock(u.pos, 2, `${spell.name} (via puddle)`);
     }
     if (d.electric) {
       // an electric spell landing directly in a puddle also conducts
       const wet = plan.area.find(p => this.state.hazardAt(p)?.kind === 'water' && !this.state.unitAt(p));
-      if (wet && !hits.length) await this.shock(wet, 2, spell.name);
+      if (wet && !hits.length) await this.shock(wet, 2, `${spell.name} (via puddle)`);
     }
 
     // --- 2. delivery displacement

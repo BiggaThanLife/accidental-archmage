@@ -136,7 +136,7 @@ export const PAYLOADS: PayloadDef[] = [
 
 export const SIDES: SideDef[] = [
   // ---- Core
-  { id: 'recoil', tier: 0, tag: 'Recoil', severity: 2, text: '...and launches the caster 2 tiles backward.' },
+  { id: 'recoil', tier: 0, tag: 'Recoil', severity: 2, text: '...and launches the caster 2 tiles backward (but the extra oomph adds +1 damage).' },
   { id: 'goose', tier: 0, tag: 'Goose', severity: 1, text: '...and summons a confused goose onto the board.' },
   { id: 'banana', tier: 0, tag: 'Bananas', severity: 1, text: '...and covers all surrounding tiles in banana peels.' },
   { id: 'discofire', tier: 0, tag: 'Disco Fire', severity: 2, text: '...and ignites any grease on the board into a massive disco fire.' },

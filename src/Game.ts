@@ -5,7 +5,7 @@ import { SceneManager } from './core/SceneManager';
 import { GridBoard, tileToWorld } from './core/GridBoard';
 import { EntityView } from './core/EntityView';
 import { Effects } from './core/Effects';
-import { GameState } from './game/GameState';
+import { GameState, TRAIT_INFO } from './game/GameState';
 import { Rules } from './game/SpellResolver';
 import { TurnManager, Phase } from './game/TurnManager';
 import { DungeonGenerator } from './game/DungeonGenerator';
@@ -14,7 +14,8 @@ import { Spell, SpellGenerator, getTargetTiles, planSpell } from './spells/Spell
 import { QUIPS } from './spells/SpellComponents';
 import { creatureDef, flawDef } from './game/Companions';
 import { MetaProgression } from './meta/MetaProgression';
-import { HUD } from './ui/HUD';
+import { HUD, traitHtml } from './ui/HUD';
+import { Guide } from './ui/Guide';
 
 const MAX_HAND = 5;
 
@@ -30,6 +31,7 @@ export class Game {
   private meta = new MetaProgression();
   private rng = new Rng((Date.now() ^ (Math.random() * 1e9)) >>> 0);
   private hud: HUD;
+  private guide!: Guide;
   private sm: SceneManager;
   private board: GridBoard;
   private view: EntityView;
@@ -53,6 +55,7 @@ export class Game {
       startRun: () => this.startRun(),
       toggleSpeed: () => this.toggleSpeed(),
     });
+    this.guide = new Guide(this.hud.stage, this.meta);
     this.sm = new SceneManager(this.hud.stage);
     this.board = new GridBoard(this.sm);
     this.view = new EntityView(this.sm, this.hud.labels);
@@ -62,7 +65,7 @@ export class Game {
     this.dungeon = new DungeonGenerator(this.rng);
 
     this.rules = new Rules(this.state, this.sm, this.board, this.view, this.fx, bonuses, this.rng, {
-      log: (m, c) => { this.hud.log(m, c); if (c === 'bad') this.run && (this.run.lastHit = m.replace(/<[^>]+>/g, '')); },
+      log: (m, c) => { this.hud.log(m, c); this.guide.noteLog(m, c); if (c === 'bad') this.run && (this.run.lastHit = m.replace(/<[^>]+>/g, '')); },
       residue: (n) => { if (this.run) { this.run.residue += n; this.refresh(); } },
       refresh: () => this.refresh(),
     });
@@ -120,6 +123,7 @@ export class Game {
     if (b.summoning) this.run.hand.push(this.gen.familiarCard());
     this.nervous = this.rng.shuffle([...QUIPS.nervous]);
     this.hud.clearLog();
+    this.guide.newRun();
     this.hud.log('You accept the post of Archmage. Nobody checked your references.', 'info');
     this.hud.hideOverlay();
     this.enterFloor();
@@ -155,6 +159,8 @@ export class Game {
     this.board.syncHazards(this.state.hazards);
     this.deselect();
     this.hud.showFloorIntro(run.floor, info.title, info.flavor);
+    this.guide.setFloor(run.floor, info.threat, this.meta.power());
+    this.guide.floorEntered(wiz.hp);
     this.hud.log(`Floor ${run.floor}: ${info.title}. ${this.state.enemies().length} staff members object to your presence.`, 'info');
     this.turns.startFloor();
   }
@@ -169,6 +175,7 @@ export class Game {
     const payloadTier = Math.min(2, Math.max(b.starterTier, Math.floor(run.floor / 2)));
     const options = [0, 1, 2].map(() => this.gen.generate({ deliveryTier: b.deliveryTier, payloadTier, sideTier: payloadTier }));
     setTimeout(() => {
+      this.guide.tip('reward');
       this.hud.showReward(run.floor, bonus, options, run.hand.length >= MAX_HAND,
         (i) => {
           const pick = options[i];
@@ -177,7 +184,7 @@ export class Game {
         },
         () => {
           const w = this.state.wizard;
-          w.hp = Math.min(w.maxHp, w.hp + 5);
+          w.hp = Math.min(w.maxHp, w.hp + 6);
           this.nextFloor();
         });
     }, 900 / this.sm.speed);
@@ -187,17 +194,21 @@ export class Game {
     const run = this.run!;
     run.floor += 1;
     const w = this.state.wizard;
-    w.hp = Math.min(w.maxHp, w.hp + 1);
+    w.hp = Math.min(w.maxHp, w.hp + 2);
     this.hud.hideOverlay();
     this.enterFloor();
   }
 
   private onDeath() {
     const run = this.run!;
+    // Severance pay: even a floor-1 death can afford a first Academy purchase, and deeper runs earn a little more
+    const severance = 3 + run.floor * 2;
+    run.residue += severance;
     this.meta.bankRun(run.residue, run.floor);
-    this.hud.log('You have died. Spectacularly. The Academy keeps your residue.', 'bad');
+    this.hud.log(`You have died. Spectacularly. The Academy keeps your residue (includes ${severance} severance pay).`, 'bad');
     setTimeout(() => {
       this.hud.showDeath(run.floor, run.residue, run.lastHit, this.meta, () => this.startRun(), () => this.showTitle());
+      this.guide.mountReview(document.querySelector('.overlay .death-head'), run.floor);
     }, 1100 / this.sm.speed);
   }
 
@@ -212,6 +223,7 @@ export class Game {
       threats: this.turns.phase === 'player' ? this.turns.threatsOnWizard().length : 0,
       speed: this.sm.speed,
     });
+    this.guide.observeHp(w.hp, w.maxHp, this.turns.phase);
     this.hud.selected = this.selected;
     this.hud.renderSpells(this.run.hand, this.turns.phase === 'player' && !this.turns.hasCast);
     this.view.refreshTags(this.state);
@@ -236,6 +248,12 @@ export class Game {
           if (this.run.floor === 1 && this.state.turn <= 3 && this.nervous.length) this.hud.log(`<i>"${this.nervous.shift()}"</i>`, 'info');
         }
       }
+      if (this.run) this.guide.turnStart({
+        telegraphs: this.state.enemies().some(e => this.rules.telegraphFor(e).length > 0),
+        hazards: new Set([...this.state.hazards.values()].map(h => h.kind as string)),
+        props: new Set(this.state.props.map(pr => pr.kind as string)),
+        turn: this.state.turn,
+      });
       if (this.selected >= 0 && (this.turns.hasCast || this.run!.hand[this.selected].cooldownLeft > 0)) this.selected = -1;
       this.updateHighlights();
     }
@@ -251,7 +269,7 @@ export class Game {
     if (!s) return;
     if (this.selected === i) { this.deselect(); return; }
     if (this.turns.hasCast) { this.hud.log('You have already cast a spell this turn. One catastrophe per turn, please.', 'info'); return; }
-    if (s.cooldownLeft > 0) { this.hud.log(`${s.name} is still recharging (${s.cooldownLeft} turn${s.cooldownLeft > 1 ? 's' : ''}).`, 'info'); return; }
+    if (s.cooldownLeft > 0) { this.guide.tip('cooldown'); this.hud.log(`${s.name} is still recharging (${s.cooldownLeft} turn${s.cooldownLeft > 1 ? 's' : ''}).`, 'info'); return; }
     this.selected = i;
     this.pending = null;
     this.hud.confirm(null);
@@ -377,6 +395,7 @@ export class Game {
         : u.familiar ? `Your familiar. ${creatureDef(u.familiar.creature).blurb} ${flawDef(u.familiar.flaw).blurb}` : 'That is you.';
       const st = this.view.statusList(u);
       parts.push(`<b>${u.name}</b> <span class="mono">${u.hp}/${u.maxHp} HP · ATK ${u.atk}${u.def ? ` · DEF ${u.def}` : ''}</span><span>${intent}</span>${st.length ? `<span class="mono">${st.join(' · ')}</span>` : ''}`);
+      if (u.trait) parts.push(traitHtml(TRAIT_INFO[u.trait]));
     }
     if (p) {
       const pd: Record<string, string> = {
@@ -492,8 +511,10 @@ export class Game {
     if (this.selected >= 0) {
       const spell = this.run.hand[this.selected];
       this.selected = -1;
+      this.guide.noteCast();
       await this.turns.playerCast(spell, t);
     } else {
+      this.guide.noteMove();
       await this.turns.playerMove(t);
     }
   }
@@ -503,6 +524,7 @@ export class Game {
     this.selected = -1; this.pending = null;
     this.hud.hint(null);
     this.hud.confirm(null);
+    this.guide.noteEndTurn(this.turns.hasMoved, this.turns.hasCast);
     await this.turns.endTurn();
   }
 

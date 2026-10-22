@@ -24,6 +24,8 @@ export type UnitKind = 'wizard' | 'guard' | 'clerk' | 'brute' | 'goose' | 'golem
 
 /** A summoned familiar's creature, flaw and bookkeeping (see game/Companions.ts). */
 export interface FamiliarInfo { creature: string; flaw: string; turns: number; asleep: number; breath: number }
+/** Enemy traits: each demands a different answer (see TRAIT_INFO in GameState). */
+export type Trait = 'shielded' | 'huddle' | 'volatile';
 export type Team = 'player' | 'enemy' | 'neutral';
 export type AttackPattern = 'melee' | 'line' | 'sweep' | 'peck';
 
@@ -71,6 +73,7 @@ export interface Unit {
   status: Status;
   alive: boolean;
   familiar?: FamiliarInfo;
+  trait?: Trait;
 }
 
 export type PropKind = 'obstacle' | 'pillar' | 'crate' | 'vase' | 'armchair' | 'cart' | 'confetti' | 'plant' | 'bin' | 'desk';
