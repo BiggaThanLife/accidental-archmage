@@ -11,7 +11,9 @@ interface Particle {
   floor: boolean;
 }
 
-interface FloatLabel { el: HTMLDivElement; pos: THREE.Vector3; born: number; life: number }
+interface FloatLabel { el: HTMLDivElement; pos: THREE.Vector3; born: number; life: number; size: number; pop: number }
+
+const MAX_PARTICLES = 220;
 
 /** Particles, projectiles and floating combat text. */
 export class Effects {
@@ -39,7 +41,9 @@ export class Effects {
   }
 
   burst(at: THREE.Vector3, colors: number[], opts: { count?: number; speed?: number; up?: number; shape?: string; gravity?: number; life?: number; size?: number } = {}) {
-    const count = opts.count ?? 14;
+    // keep phones cheap: cap live particles, trim new bursts when the pool is full
+    const room = Math.max(0, MAX_PARTICLES - this.particles.length);
+    const count = Math.min(opts.count ?? 14, room);
     for (let i = 0; i < count; i++) {
       const color = colors[i % colors.length];
       const mesh = new THREE.Mesh(
@@ -115,12 +119,44 @@ export class Effects {
     this.sm.scene.remove(line);
   }
 
-  floatText(at: THREE.Vector3, text: string, cls = 'dmg', life = 1.3) {
+  /**
+   * Floating text. `size` scales the pop (1 = normal, capped for small screens); `pop` is the overshoot amount.
+   * Existing callers keep the old look (size 1, pop 0.x).
+   */
+  floatText(at: THREE.Vector3, text: string, cls = 'dmg', life = 1.3, opts: { size?: number; pop?: number } = {}) {
     const el = document.createElement('div');
     el.className = `float-text ${cls}`;
     el.textContent = text;
     this.labelLayer.appendChild(el);
-    this.labels.push({ el, pos: at.clone(), born: performance.now(), life: life * 1000 / this.sm.speed });
+    while (this.labels.length > 40) { const o = this.labels.shift()!; o.el.remove(); }
+    const reduced = this.sm.reduceMotion;
+    this.labels.push({
+      el, pos: at.clone(), born: this.sm.now(), life: life * 1000 / this.sm.speed,
+      size: Math.min(1.7, opts.size ?? 1), pop: reduced ? 0 : (opts.pop ?? 0),
+    });
+  }
+
+  /**
+   * Impact number scaled by how big the hit is. kind picks the style:
+   * 'hit' normal damage, 'self' damage to the player, 'kill' lethal blow, 'bonus' crit/bonus damage, 'heal' healing.
+   */
+  damageNumber(at: THREE.Vector3, amount: number, kind: 'hit' | 'self' | 'kill' | 'bonus' | 'heal' = 'hit') {
+    const mag = Math.min(1, amount / 8);
+    const size = 1 + mag * 0.5 + (kind === 'kill' ? 0.2 : kind === 'bonus' ? 0.15 : 0);
+    const pop = 0.25 + mag * 0.5 + (kind === 'kill' || kind === 'bonus' ? 0.2 : 0);
+    const cls = kind === 'self' ? 'dmg-self' : kind === 'kill' ? 'dmg dmg-kill' : kind === 'bonus' ? 'dmg dmg-bonus'
+      : kind === 'heal' ? 'dmg-heal' : 'dmg';
+    const txt = kind === 'heal' ? `+${amount}` : kind === 'bonus' ? `-${amount}!` : kind === 'kill' ? `-${amount}!!` : `-${amount}`;
+    this.floatText(at, txt, cls, kind === 'kill' ? 1.5 : 1.3, { size, pop });
+  }
+
+  /** Big screen-space callout ("COMBO x3", "CHAIN REACTION"). Pure CSS animation; removes itself. */
+  callout(text: string, tier = 1) {
+    const el = document.createElement('div');
+    el.className = `callout tier-${Math.min(3, Math.max(1, tier))}${this.sm.reduceMotion ? ' still' : ''}`;
+    el.textContent = text;
+    this.labelLayer.appendChild(el);
+    setTimeout(() => el.remove(), 1300);
   }
 
   private tick(dt: number) {
@@ -144,12 +180,18 @@ export class Effects {
       this.particles = this.particles.filter(p => p.life > 0);
     }
 
-    const now = performance.now();
+    const now = this.sm.now();
     for (const l of this.labels) {
       const t = (now - l.born) / l.life;
       const s = this.sm.toScreen(l.pos.clone().setY(l.pos.y + t * 0.9));
-      l.el.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -50%) scale(${t < 0.15 ? 0.6 + t * 2.7 : 1})`;
-      l.el.style.opacity = String(t > 0.7 ? (1 - t) / 0.3 : 1);
+      let sc = 1;
+      if (t < 0.15) sc = 0.6 + t * 2.7;
+      if (l.pop > 0) {
+        // overshoot then settle: 0 -> (1+pop) at 12% -> 1 at 30%
+        sc = t < 0.12 ? 0.4 + (0.6 + l.pop) * (t / 0.12) : t < 0.3 ? 1 + l.pop * (1 - (t - 0.12) / 0.18) : 1;
+      }
+      l.el.style.transform = `translate(${s.x}px, ${s.y}px) translate(-50%, -50%) scale(${sc * l.size})`;
+      l.el.style.opacity = String(t > 0.7 ? Math.max(0, (1 - t) / 0.3) : 1);
     }
     const old = this.labels.filter(l => now - l.born > l.life);
     if (old.length) {

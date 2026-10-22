@@ -11,6 +11,7 @@ import { SceneManager } from '../core/SceneManager';
 import { GridBoard, tileToWorld } from '../core/GridBoard';
 import { EntityView, makeDeliveryMesh, makeArmchair } from '../core/EntityView';
 import { Effects } from '../core/Effects';
+import { Juice } from '../core/Juice';
 import { Spell, SpellPlan, planSpell, getTargetTiles } from '../spells/SpellGenerator';
 import { QUIPS } from '../spells/SpellComponents';
 import type { MetaBonuses } from '../meta/MetaProgression';
@@ -36,6 +37,11 @@ export class Rules {
   exitInterviewLoss = 0;
   /** Coffee Run: set during a cast when the wizard gets a second move. */
   private grantExtraMove = false;
+  /** presentation-only impact feedback (hit-stop, shake, slow-mo, callouts) */
+  private juice: Juice;
+  /** where the last damage came from, per unit id, so deaths can launch away from it */
+  private lastFrom = new Map<number, Vec>();
+  private castBlasts = 0;
 
   constructor(
     public state: GameState,
@@ -46,7 +52,7 @@ export class Rules {
     public bonuses: MetaBonuses,
     private rng: Rng,
     private hooks: RuleHooks,
-  ) {}
+  ) { this.juice = new Juice(sm, fx); }
 
   private sync() {
     this.view.sync(this.state);
@@ -57,7 +63,7 @@ export class Rules {
   private uw(u: Unit, y = 1.0) { const p = this.view.unitWorld(u); p.y = y; return p; }
 
   // ================================================================ damage
-  async damage(u: Unit, amount: number, source: string, opts: { silent?: boolean; from?: Vec } = {}) {
+  async damage(u: Unit, amount: number, source: string, opts: { silent?: boolean; from?: Vec; bonus?: boolean } = {}) {
     if (!u.alive || amount <= 0) return;
     let dmg = amount;
     if (u.status.enraged > 0) dmg += 1;
@@ -86,8 +92,11 @@ export class Rules {
       return;
     }
     u.hp -= dmg;
-    this.view.flash(u);
-    this.fx.floatText(this.uw(u), `-${dmg}`, u.team === 'player' ? 'dmg-self' : 'dmg');
+    const lethal = u.hp <= 0;
+    if (opts.from) this.lastFrom.set(u.id, opts.from);
+    this.view.flash(u, { from: opts.from, strength: Math.min(1, dmg / 5) });
+    this.fx.damageNumber(this.uw(u), dmg, lethal ? 'kill' : opts.bonus ? 'bonus' : u.team === 'player' ? 'self' : 'hit');
+    this.juice.impact(dmg, lethal);
     if (!opts.silent && u.kind === 'wizard') this.hooks.log(`${source} hits you for ${dmg}. ${this.rng.pick(QUIPS.wizardHurt)}`, 'bad');
     if (u.hp <= 0) await this.kill(u, source);
     this.view.refreshTags(this.state);
@@ -100,7 +109,8 @@ export class Rules {
   async kill(u: Unit, source: string) {
     if (!u.alive) return;
     u.hp = 0;
-    await this.view.die(u);
+    await this.view.die(u, this.lastFrom.get(u.id));
+    this.lastFrom.delete(u.id);
     u.alive = false;
     if (u.team === 'enemy') {
       this.hooks.log(`${u.name} ${this.rng.pick(QUIPS.kill)} (${source})`, 'good');
@@ -114,6 +124,12 @@ export class Rules {
         this.fx.floatText(this.uw(u, 2.0), `🎯 +${bonus} slapstick`, 'shout');
         this.hooks.log(`Creative liability! ${bonus > 1 ? 'A chain reaction' : 'The environment'} did the paperwork for you (+${bonus} residue).`, 'boom');
         this.hooks.residue(bonus, 'slapstick combo');
+      }
+      // big-moment emphasis, reusing the multi-kill / indirect-kill info computed above
+      if (this.currentSpell !== null && this.castKills >= 2) {
+        this.juice.bigMoment(source !== this.currentSpell && this.castKills >= 3 ? 'chain' : 'combo', this.castKills);
+      } else if (this.currentSpell !== null && source !== this.currentSpell && this.castBlasts >= 2) {
+        this.juice.bigMoment('chain', 2);
       }
     } else if (u.kind === 'goose') {
       this.hooks.log('The goose departs in a cloud of feathers and spite.', 'info');
@@ -185,10 +201,10 @@ export class Rules {
     this.fx.floatText(this.uw(u, 1.3), this.rng.pick(QUIPS.bump), 'bonk');
     this.sm.addShake(0.12);
     const wizardPadded = u.kind === 'wizard' && this.bonuses.paddedHat;
-    if (!noDamage && !wizardPadded) await this.damage(u, 1 + mom, 'A wall-related incident');
+    if (!noDamage && !wizardPadded) await this.damage(u, 1 + mom, 'A wall-related incident', { bonus: mom > 0 });
     if (!inBounds(into)) return;
     const other = this.state.unitAt(into);
-    if (other && !noDamage) await this.damage(other, 1 + mom, `${u.name} (thrown)`);
+    if (other && !noDamage) await this.damage(other, 1 + mom, `${u.name} (thrown)`, { bonus: mom > 0 });
     const prop = this.state.propAt(into);
     if (prop) await this.hitProp(prop, 1, `${u.name} slammed into it`);
   }
@@ -347,7 +363,9 @@ export class Rules {
     const w = tileToWorld(c, 0.4);
     this.fx.burst(w, [0x7ccf5a, 0x4caf50, 0xa5d66f, 0xa8743f], { count: 28, shape: 'leaf', speed: 4.5, up: 5 });
     this.fx.ring(w, 0x9cff6a, 2.6);
-    this.sm.addShake(0.35);
+    this.castBlasts++;
+    this.juice.blast(2);
+    if (this.currentSpell !== null && this.castBlasts >= 2) this.juice.bigMoment('chain', 2);
     this.hooks.log('An Explosive Cabbage Crate detonates! Coleslaw everywhere.', 'boom');
     const dmg = 2 + this.bonuses.cabbageDmg;
     await this.blast(c, dmg, 'Exploding cabbage', true);
@@ -506,7 +524,7 @@ export class Rules {
     const selfCentred = spell.delivery.shape === 'selfAoe' || spell.delivery.shape === 'global';
     if (caster.facing !== plan.dir && !selfCentred) { caster.facing = plan.dir; await this.view.face(caster); }
 
-    if (!echo) { this.currentSpell = spell.name; this.castKills = 0; }
+    if (!echo) { this.currentSpell = spell.name; this.castKills = 0; this.castBlasts = 0; this.juice.beginCast(); await this.view.charge(caster, spell.delivery.color); }
     await this.animateDelivery(spell, caster, plan);
     await this.resolveImpact(spell, caster, plan);
 
@@ -650,7 +668,7 @@ export class Rules {
         hitDmg += 1;
         this.fx.floatText(this.uw(u, 1.9), '🦆 SITTING DUCK', 'bonk');
       }
-      await this.damage(u, hitDmg, spell.name, { from: caster.pos });
+      await this.damage(u, hitDmg, spell.name, { from: caster.pos, bonus: hitDmg > dmg });
       if (!u.alive) continue;
       this.applyStatus(spell, u);
       if (d.id === 'anvil') { u.status.rooted = Math.max(u.status.rooted, 1); await this.view.squash(u); }
@@ -857,6 +875,7 @@ export class Rules {
       case 'burrito': s.frozen = Math.max(s.frozen, 2); say('🧊 brr'); break;
       case 'overtime': s.slow = Math.max(s.slow, 3); say('😩 unpaid hours'); break;
       case 'positivity':
+        if (u.hp < u.maxHp) this.fx.damageNumber(this.uw(u, 1.3), 1, 'heal');
         u.hp = Math.min(u.maxHp, u.hp + 1);
         s.pacified = Math.max(s.pacified, 2);
         say('🌈 good vibes only!');

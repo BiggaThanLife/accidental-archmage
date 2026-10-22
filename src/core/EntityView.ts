@@ -637,14 +637,79 @@ export class EntityView {
     m.rotation.y = facingToRot(u.facing);
   }
 
-  flash(u: Unit) {
+  /** Emissive materials of a unit mesh, with their original emissive remembered so overlapping flashes can't stick. */
+  private emissives(m: THREE.Object3D): THREE.MeshStandardMaterial[] {
+    const mats: THREE.MeshStandardMaterial[] = [];
+    m.traverse(c => {
+      const mm = (c as THREE.Mesh).material as THREE.MeshStandardMaterial;
+      if (mm && 'emissive' in mm) {
+        if (mm.userData.baseEm === undefined) mm.userData.baseEm = mm.emissive.getHex();
+        mats.push(mm);
+      }
+    });
+    return mats;
+  }
+
+  /**
+   * Hit reaction (not awaited): white flash fading to red, plus squash-and-stretch and a lean away from `from`.
+   * `strength` ~0..1 scales the squash. Under reduced motion it is just a simple red flash.
+   */
+  flash(u: Unit, opts: { from?: Vec; strength?: number } = {}) {
     const m = this.unitMeshes.get(u.id);
     if (!m) return;
-    const mats: THREE.MeshStandardMaterial[] = [];
-    m.traverse(c => { const mm = (c as THREE.Mesh).material as THREE.MeshStandardMaterial; if (mm && 'emissive' in mm) mats.push(mm); });
-    const prev = mats.map(mm => mm.emissive.getHex());
-    mats.forEach(mm => mm.emissive.setHex(0xff2222));
-    setTimeout(() => mats.forEach((mm, i) => mm.emissive.setHex(prev[i])), 160 / this.sm.speed);
+    const mats = this.emissives(m);
+    if (this.sm.reduceMotion) {
+      mats.forEach(mm => mm.emissive.setHex(0xff2222));
+      setTimeout(() => mats.forEach(mm => mm.emissive.setHex(mm.userData.baseEm)), 160);
+      return;
+    }
+    const str = Math.min(1, opts.strength ?? 0.4);
+    const c0 = m.children[0];
+    const rot0 = c0 ? c0.rotation.clone() : null;
+    // lean axis: tilt away from the attacker
+    let lx = 0, lz = 0;
+    if (opts.from) {
+      const dx = u.pos.x - opts.from.x, dy = u.pos.y - opts.from.y;
+      const len = Math.hypot(dx, dy) || 1;
+      lz = -(dx / len); lx = dy / len;
+    }
+    const white = new THREE.Color(0xffffff), red = new THREE.Color(0xff2222);
+    this.sm.tween(230, t => {
+      const col = t < 0.35 ? white : red.clone().multiplyScalar(1 - (t - 0.35) / 0.65);
+      for (const mm of mats) {
+        const base = new THREE.Color(mm.userData.baseEm);
+        if (t >= 1) mm.emissive.copy(base);
+        else mm.emissive.setRGB(Math.max(col.r, base.r), Math.max(col.g, base.g), Math.max(col.b, base.b));
+      }
+      // squash-and-stretch: quick squash, overshoot stretch, settle
+      const w = Math.sin(t * Math.PI * 2.4) * (1 - t) * (0.12 + str * 0.28);
+      m.scale.set(1 + w, 1 - w * 1.1, 1 + w);
+      if (c0 && rot0) {
+        const k = Math.sin(Math.min(1, t * 1.6) * Math.PI) * (0.15 + str * 0.35) * (1 - t * 0.5);
+        c0.rotation.x = rot0.x + lx * k; c0.rotation.z = rot0.z + lz * k;
+      }
+    }, Ease.linear).then(() => {
+      mats.forEach(mm => mm.emissive.setHex(mm.userData.baseEm));
+    });  // scale/lean already land exactly on neutral at t=1; don't clobber other tweens here
+  }
+
+  /** Cast wind-up: crouch, glow in the spell's colour, then spring up. Resolves when the release should happen. */
+  async charge(u: Unit, color: number) {
+    const m = this.unitMeshes.get(u.id);
+    if (!m) return;
+    const mats = this.emissives(m);
+    const glow = new THREE.Color(color);
+    const reduced = this.sm.reduceMotion;
+    await this.sm.tween(reduced ? 90 : 170, t => {
+      const g = Math.sin(t * Math.PI);
+      for (const mm of mats) mm.emissive.copy(new THREE.Color(mm.userData.baseEm).lerp(glow, g * 0.6));
+      if (!reduced) {
+        const k = t < 0.65 ? t / 0.65 : 1 - (t - 0.65) / 0.35 * 1.4;   // crouch then spring past neutral
+        m.scale.set(1 + k * 0.12, 1 - k * 0.2, 1 + k * 0.12);
+      }
+    }, Ease.linear);
+    mats.forEach(mm => mm.emissive.setHex(mm.userData.baseEm));
+    m.scale.set(1, 1, 1);
   }
 
   async squash(u: Unit) {
@@ -654,15 +719,24 @@ export class EntityView {
     m.scale.set(1, 1, 1);
   }
 
-  async die(u: Unit) {
+  /** Death: pop, spin and launch away from the hit (slapstick); simple shrink under reduced motion. */
+  async die(u: Unit, from?: Vec) {
     const m = this.unitMeshes.get(u.id);
     if (!m) return;
-    const y0 = m.position.y;
+    const y0 = m.position.y, p0 = m.position.clone();
+    if (this.sm.reduceMotion) {
+      await this.sm.tween(350, t => { m.scale.setScalar(1 - t * 0.9); });
+      return;
+    }
+    let dx = 0, dz = 0;
+    if (from) { const lx = u.pos.x - from.x, ly = u.pos.y - from.y, len = Math.hypot(lx, ly) || 1; dx = lx / len; dz = ly / len; }
+    const spin = m.rotation.y;
     await this.sm.tween(500, t => {
+      m.position.set(p0.x + dx * 0.9 * t, y0 + Math.sin(Math.PI * t) * 1.3, p0.z + dz * 0.9 * t);
+      m.rotation.y = spin + t * Math.PI * 4;
       m.rotation.z = t * Math.PI * 0.5;
-      m.position.y = y0 + Math.sin(Math.PI * t) * 0.6;
-      m.scale.setScalar(1 - t * 0.9);
-    });
+      m.scale.setScalar(t < 0.18 ? 1 + 0.35 * (t / 0.18) : Math.max(0.05, 1.35 * (1 - (t - 0.18) / 0.82)));
+    }, Ease.linear);
   }
 
   async dropProp(p: Prop, height = 4) {

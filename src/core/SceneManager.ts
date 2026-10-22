@@ -32,6 +32,14 @@ export class SceneManager {
   private last = performance.now();
   private elapsed = 0;
   private shake = 0;
+  /** virtual animation clock (ms). Stops during hit-stop, slows during slow-mo. Tweens/labels use this. */
+  private clock = 0;
+  private freezeLeft = 0;   // real ms of hit-stop remaining
+  private slowLeft = 0;     // real ms of slow-mo remaining
+  private slowScale = 1;
+  private punchAmt = 0;     // camera punch-in (zoom pulse), decays
+  /** true when the user prefers reduced motion: no shake / slow-mo / hit-stop / camera punch */
+  readonly reduceMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   private baseCamPos = new THREE.Vector3(20, 20, 20);
   /** global animation speed multiplier (2 = twice as fast) */
   speed = 1;
@@ -99,13 +107,29 @@ export class SceneManager {
 
   tween(durMs: number, update: (t: number) => void, ease: Easing = Ease.outCubic): Promise<void> {
     return new Promise(resolve => {
-      this.tweens.push({ start: performance.now(), dur: Math.max(1, durMs / this.speed), ease, update, resolve });
+      this.tweens.push({ start: this.clock, dur: Math.max(1, durMs / this.speed), ease, update, resolve });
     });
   }
 
   wait(ms: number) { return this.tween(ms, () => {}); }
 
-  addShake(amount: number) { this.shake = Math.min(0.5, this.shake + amount); }
+  /** Animation-clock time in ms (frozen during hit-stop). */
+  now() { return this.clock; }
+
+  addShake(amount: number) { if (this.reduceMotion) return; this.shake = Math.min(0.5, this.shake + amount); }
+
+  /** Freeze the animation clock for ms of REAL time (capped; always counts down in real time so it always resumes). */
+  hitStop(ms: number) { if (this.reduceMotion) return; this.freezeLeft = Math.min(150, Math.max(this.freezeLeft, ms)); }
+
+  /** Run the animation clock at `scale` for ms of REAL time (always expires in real time). */
+  slowMo(scale: number, ms: number) {
+    if (this.reduceMotion) return;
+    this.slowScale = Math.max(0.25, Math.min(1, scale));
+    this.slowLeft = Math.min(500, Math.max(this.slowLeft, ms));
+  }
+
+  /** Brief camera zoom-in pulse (0..1, capped small). */
+  punch(amount: number) { if (this.reduceMotion) return; this.punchAmt = Math.min(0.12, Math.max(this.punchAmt, amount)); }
 
   /** Project a world position to container pixel coordinates. */
   toScreen(v: THREE.Vector3): { x: number; y: number } {
@@ -117,9 +141,14 @@ export class SceneManager {
   }
 
   private frame() {
-    const now = performance.now();
-    const dt = Math.min(0.05, (now - this.last) / 1000);
-    this.last = now;
+    const realNow = performance.now();
+    const realDt = Math.min(0.05, (realNow - this.last) / 1000);
+    this.last = realNow;
+    let dt = realDt;
+    if (this.freezeLeft > 0) { this.freezeLeft -= realDt * 1000; dt = 0; }
+    else if (this.slowLeft > 0) { this.slowLeft -= realDt * 1000; dt = realDt * this.slowScale; }
+    this.clock += dt * 1000;
+    const now = this.clock;
     this.elapsed += dt;
     const time = this.elapsed;
     const done: Tween[] = [];
@@ -134,6 +163,11 @@ export class SceneManager {
     }
     for (const fn of this.tickers) fn(dt, time);
 
+    // camera punch-in
+    const z = 1 + this.punchAmt;
+    if (this.camera.zoom !== z) { this.camera.zoom = z; this.camera.updateProjectionMatrix(); }
+    this.punchAmt = this.punchAmt > 0.002 ? this.punchAmt * Math.pow(0.0005, realDt) : 0;
+
     // camera shake
     if (this.shake > 0.001) {
       this.camera.position.set(
@@ -141,7 +175,7 @@ export class SceneManager {
         this.baseCamPos.y + (Math.random() - 0.5) * this.shake,
         this.baseCamPos.z + (Math.random() - 0.5) * this.shake,
       );
-      this.shake *= 0.86;
+      this.shake *= 0.86; // decays per frame, independent of hit-stop
     } else {
       this.camera.position.copy(this.baseCamPos);
     }
